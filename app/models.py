@@ -16,7 +16,9 @@ class ProjectRequest(BaseModel):
     quality_threshold: int = Field(default=78, ge=50, le=100)
     max_retries: int = Field(default=1, ge=0, le=3)
     production_mode: Literal["draft", "production", "cinematic"] = "production"
+    workflow_mode: Literal["single", "dialogue"] = "dialogue"
     line_emotions: dict[int, str] = Field(default_factory=dict)
+    line_addressees: dict[int, str] = Field(default_factory=dict)
     locked_casting: list[dict[str, Any]] = Field(default_factory=list)
 
     @field_validator("script")
@@ -49,15 +51,42 @@ class ProjectCreate(BaseModel):
     background: str = Field(min_length=3, max_length=4_000)
 
 
+class ProjectUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    scene: str | None = Field(default=None, min_length=1, max_length=80)
+    background: str | None = Field(default=None, min_length=3, max_length=4_000)
+
+
+class CharacterUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    brief: str = Field(min_length=1, max_length=1_000)
+
+
+class VoiceSelectionCreate(BaseModel):
+    voice: str = Field(min_length=1, max_length=40)
+
+
+class VoicePreviewCreate(BaseModel):
+    voice: str = Field(min_length=1, max_length=40)
+    language: Literal["zh", "en", "ja"] = "zh"
+
+
 class DialogueCreate(BaseModel):
     emotion: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=4_000)
+    addressee_id: str | None = Field(default=None, max_length=40)
 
 
 class DialogueRecord(BaseModel):
     id: str
     emotion: str
     text: str
+    addressee_id: str | None = None
+    order: int = 0
+
+
+class CharacterRecastCreate(BaseModel):
+    voice_presentation: Literal["auto", "feminine", "masculine", "neutral"] = "auto"
 
 
 class CharacterRecord(BaseModel):
@@ -68,6 +97,7 @@ class CharacterRecord(BaseModel):
     image_mime_type: str
     image_storage_name: str
     casting: dict[str, Any]
+    voice_presentation: Literal["auto", "feminine", "masculine", "neutral"] = "auto"
     voice_locked: bool = False
     dialogues: list[DialogueRecord] = Field(default_factory=list)
 
@@ -85,7 +115,12 @@ class ProjectRecord(BaseModel):
 class ProductionCreate(BaseModel):
     target_language: Literal["zh", "en", "ja"]
     production_mode: Literal["draft", "production", "cinematic"] = "production"
+    workflow_mode: Literal["single", "dialogue"] = "dialogue"
     revision_limit: int = Field(default=2, ge=0, le=3)
+    character_id: str | None = Field(default=None, max_length=40)
+    single_character_id: str | None = Field(default=None, max_length=40)
+    single_emotion: str | None = Field(default=None, max_length=80)
+    single_text: str | None = Field(default=None, max_length=4_000)
 
 
 class JobEvent(BaseModel):

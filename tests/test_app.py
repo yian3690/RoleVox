@@ -9,11 +9,19 @@ os.environ["DEMO_MODE"] = "true"
 from fastapi.testclient import TestClient
 
 from main import app
-from app.pipeline import WorkflowEngine
+import main as main_module
+from app.pipeline import FEMININE_VOICES, MASCULINE_VOICES, WorkflowEngine
 import app.pipeline as pipeline_module
 
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def isolated_project_store(monkeypatch, tmp_path):
+    monkeypatch.setattr(main_module, "PROJECTS", {})
+    monkeypatch.setattr(main_module, "PROJECT_IMAGES", {})
+    monkeypatch.setattr(main_module, "PROJECT_ROOT", tmp_path / "projects")
 
 
 def test_health_and_voices():
@@ -115,6 +123,25 @@ def test_tts_retries_recoverable_audio_completion_error(monkeypatch):
     assert cast["voice"] == "Kore"
 
 
+def test_tts_retries_when_candidate_content_has_no_parts(monkeypatch):
+    calls = []
+
+    def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return SimpleNamespace(candidates=[SimpleNamespace(content=SimpleNamespace(parts=None))])
+        return _generate_content_audio_response(b"\x00\x00" * 120)
+
+    monkeypatch.setattr(pipeline_module, "DEMO_MODE", False)
+    monkeypatch.setattr(pipeline_module.time, "sleep", lambda _: None)
+    fake_client = SimpleNamespace(models=SimpleNamespace(generate_content=create))
+    cast = {"voice": "Kore", "profile": "An original fictional guardian", "voice_locked": True}
+    wav = WorkflowEngine()._tts(fake_client, _tts_fixture_line(), cast, {}, 0)
+
+    assert wav.startswith(b"RIFF")
+    assert len(calls) == 2
+
+
 def test_tts_switches_to_fallback_system_voice_after_two_failures(monkeypatch):
     calls = []
 
@@ -157,17 +184,19 @@ def test_tts_never_switches_a_locked_voice(monkeypatch):
     assert "tts_fallback" not in cast
 
 
-def test_project_voice_lock_and_agentic_revision_flow():
+def test_project_voice_lock_and_agentic_revision_flow(isolated_project_store):
     project_response = client.post("/api/projects", json={
         "title": "Original Worlds", "scene": "The Last Gate",
         "background": "An original veteran guardian hears an unseen creature beyond the gate.",
     })
     assert project_response.status_code == 201
     project = project_response.json()
+    assert any(item["id"] == project["id"] for item in client.get("/api/projects").json())
 
     cast_response = client.post(
         f"/api/projects/{project['id']}/characters",
-        data={"name": "Aren", "brief": "An original weathered guardian; restrained and authoritative."},
+        data={"name": "Aren", "brief": "An original weathered female guardian; restrained and authoritative.",
+              "voice_presentation": "feminine"},
         files={"image": ("aren.png", b"\x89PNG\r\n\x1a\nrolevox-original", "image/png")},
     )
     assert cast_response.status_code == 201
@@ -177,7 +206,34 @@ def test_project_voice_lock_and_agentic_revision_flow():
     assert character["casting"]["perceived_archetype"]
     assert character["casting"]["confidence"] == 87
     assert character["casting"]["voice_identity"]["voice"]
+    assert len(character["casting"]["voice_candidates"]) == 3
+    assert len({item["voice"] for item in character["casting"]["voice_candidates"]}) == 3
+    assert all(item["voice"] in FEMININE_VOICES for item in character["casting"]["voice_candidates"])
+    assert character["voice_presentation"] == "feminine"
+    assert character["casting"]["selected_voice"] is None
+    image_response = client.get(
+        f"/api/projects/{project['id']}/characters/{character['id']}/image"
+    )
+    assert image_response.status_code == 200
+    assert image_response.headers["content-type"] == "image/png"
 
+    lock_response = client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/lock"
+    )
+    assert lock_response.status_code == 422
+    candidate_voice = character["casting"]["voice_candidates"][1]["voice"]
+    preview_response = client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/voice-preview",
+        json={"voice": candidate_voice, "language": "ja"},
+    )
+    assert preview_response.status_code == 200
+    assert preview_response.content.startswith(b"RIFF")
+    select_response = client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
+        json={"voice": candidate_voice},
+    )
+    assert select_response.status_code == 200
+    assert select_response.json()["characters"][0]["casting"]["selected_voice"] == candidate_voice
     lock_response = client.post(
         f"/api/projects/{project['id']}/characters/{character['id']}/lock"
     )
@@ -185,6 +241,21 @@ def test_project_voice_lock_and_agentic_revision_flow():
     locked = lock_response.json()["characters"][0]
     assert locked["voice_locked"] is True
     assert locked["casting"]["voice_identity"]["locked"] is True
+    assert locked["casting"]["voice"] == candidate_voice
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
+        json={"voice": character["casting"]["voice_candidates"][0]["voice"]},
+    ).status_code == 409
+
+    unlock_response = client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/unlock"
+    )
+    assert unlock_response.status_code == 200
+    assert unlock_response.json()["characters"][0]["voice_locked"] is False
+    relock_response = client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/lock"
+    )
+    locked = relock_response.json()["characters"][0]
 
     dialogue_response = client.post(
         f"/api/projects/{project['id']}/characters/{character['id']}/dialogues",
@@ -192,16 +263,42 @@ def test_project_voice_lock_and_agentic_revision_flow():
     )
     assert dialogue_response.status_code == 201
 
+    second_cast = client.post(
+        f"/api/projects/{project['id']}/characters",
+        data={"name": "Mira", "brief": "An original young male mage with a bright, urgent delivery.",
+              "voice_presentation": "masculine"},
+        files={"image": ("mira.png", b"\x89PNG\r\n\x1a\nrolevox-mage", "image/png")},
+    )
+    assert second_cast.status_code == 201
+    second = second_cast.json()["characters"][1]
+    assert all(item["voice"] in MASCULINE_VOICES for item in second["casting"]["voice_candidates"])
+    second_voice = second["casting"]["voice_candidates"][0]["voice"]
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{second['id']}/select-voice",
+        json={"voice": second_voice},
+    ).status_code == 200
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{second['id']}/lock"
+    ).status_code == 200
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{second['id']}/dialogues",
+        json={"emotion": "urgent", "text": "The barrier will not hold much longer."},
+    ).status_code == 201
+
     production_response = client.post(
         f"/api/projects/{project['id']}/produce",
-        json={"target_language": "en", "production_mode": "production", "revision_limit": 2},
+        json={"target_language": "en", "production_mode": "production", "revision_limit": 2,
+              "character_id": character["id"]},
     )
     assert production_response.status_code == 202
     job = client.get(f"/api/jobs/{production_response.json()['id']}").json()
     assert job["status"] == "completed"
     result = job["result"]
     assert result["production_mode"] == "production"
+    assert result["workflow_mode"] == "dialogue"
     assert result["production_target"] == 86
+    assert len(result["casting"]) == 1
+    assert len(result["lines"]) == 1
     assert result["casting"][0]["voice"] == locked["casting"]["voice"]
     assert result["casting"][0]["voice_identity"]["locked"] is True
     line = result["lines"][0]
@@ -211,3 +308,174 @@ def test_project_voice_lock_and_agentic_revision_flow():
     assert line["takes"][0]["revision"]["speaking_rate"]["to"] == 0.87
     assert line["takes"][1]["qa"]["score"] == 93
     assert line["takes"][1]["approved"] is True
+
+
+def test_project_dialogue_order_target_edit_and_recast(isolated_project_store):
+    project = client.post("/api/projects", json={
+        "title": "Context Test", "scene": "Camp", "background": "Two allies discuss the next move.",
+    }).json()
+    for name, presentation in (("Rin", "feminine"), ("Taro", "masculine")):
+        response = client.post(
+            f"/api/projects/{project['id']}/characters",
+            data={"name": name, "brief": f"{name} is a calm original game character.",
+                  "voice_presentation": presentation},
+            files={"image": (f"{name}.png", b"\x89PNG\r\n\x1a\nrolevox-context", "image/png")},
+        )
+        assert response.status_code == 201
+        project = response.json()
+    rin, taro = project["characters"]
+
+    first = client.post(
+        f"/api/projects/{project['id']}/characters/{rin['id']}/dialogues",
+        json={"emotion": "quiet concern", "text": "Are you ready?", "addressee_id": taro["id"]},
+    )
+    assert first.status_code == 201
+    first_line = first.json()["characters"][0]["dialogues"][0]
+    second = client.post(
+        f"/api/projects/{project['id']}/characters/{taro['id']}/dialogues",
+        json={"emotion": "steady", "text": "I am.", "addressee_id": None},
+    )
+    assert second.status_code == 201
+    project = second.json()
+    assert project["characters"][0]["dialogues"][0]["order"] == 1
+    assert project["characters"][1]["dialogues"][0]["order"] == 2
+
+    edited = client.patch(
+        f"/api/projects/{project['id']}/characters/{rin['id']}/dialogues/{first_line['id']}",
+        json={"emotion": "guarded concern", "text": "Are you truly ready?", "addressee_id": taro["id"]},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["characters"][0]["dialogues"][0]["emotion"] == "guarded concern"
+
+    recast = client.post(
+        f"/api/projects/{project['id']}/characters/{rin['id']}/recast",
+        json={"voice_presentation": "masculine"},
+    )
+    assert recast.status_code == 200
+    recast_character = recast.json()["characters"][0]
+    assert recast_character["casting"]["selected_voice"] is None
+    assert all(item["voice"] in MASCULINE_VOICES
+               for item in recast_character["casting"]["voice_candidates"])
+    project = recast.json()
+    for character in project["characters"]:
+        voice = character["casting"]["voice_candidates"][0]["voice"]
+        selected = client.post(
+            f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
+            json={"voice": voice},
+        )
+        assert selected.status_code == 200
+        assert client.post(
+            f"/api/projects/{project['id']}/characters/{character['id']}/lock"
+        ).status_code == 200
+    production = client.post(
+        f"/api/projects/{project['id']}/produce",
+        json={"target_language": "en", "production_mode": "draft", "revision_limit": 0},
+    )
+    assert production.status_code == 202
+    result = client.get(f"/api/jobs/{production.json()['id']}").json()["result"]
+    assert [line["source_text"] for line in result["lines"]] == ["Are you truly ready?", "I am."]
+    assert result["lines"][0]["addressee"] == "Taro"
+    assert result["lines"][1]["addressee"] == "context-inferred"
+
+    before = sum(len(character["dialogues"]) for character in client.get(
+        f"/api/projects/{project['id']}"
+    ).json()["characters"])
+    single = client.post(
+        f"/api/projects/{project['id']}/produce",
+        json={"target_language": "ja", "production_mode": "draft", "revision_limit": 0,
+              "workflow_mode": "single", "single_character_id": rin["id"],
+              "single_emotion": "quiet resolve", "single_text": "We move at dawn."},
+    )
+    assert single.status_code == 202
+    single_result = client.get(f"/api/jobs/{single.json()['id']}").json()["result"]
+    assert single_result["workflow_mode"] == "single"
+    assert len(single_result["lines"]) == 1
+    assert single_result["lines"][0]["source_text"] == "We move at dawn."
+    after = sum(len(character["dialogues"]) for character in client.get(
+        f"/api/projects/{project['id']}"
+    ).json()["characters"])
+    assert after == before
+
+
+def test_project_rename_and_recoverable_delete(isolated_project_store, tmp_path):
+    created = client.post("/api/projects", json={
+        "title": "Old Name", "scene": "Opening", "background": "A test world.",
+    }).json()
+    renamed = client.patch(f"/api/projects/{created['id']}", json={
+        "title": "New Name", "scene": "New Scene", "background": "An updated world background.",
+    })
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "New Name"
+    assert renamed.json()["scene"] == "New Scene"
+    assert renamed.json()["background"] == "An updated world background."
+
+    deleted = client.delete(f"/api/projects/{created['id']}")
+    assert deleted.status_code == 204
+    assert client.get(f"/api/projects/{created['id']}").status_code == 404
+    trash = tmp_path / "project-trash"
+    assert any(path.name.startswith(created["id"]) for path in trash.iterdir())
+
+
+def test_character_name_and_brief_edit_preserves_voice_lock(isolated_project_store):
+    project = client.post("/api/projects", json={
+        "title": "Editable Cast", "scene": "Tower", "background": "An original fantasy tower.",
+    }).json()
+    cast = client.post(
+        f"/api/projects/{project['id']}/characters",
+        data={"name": "Mira", "brief": "A calm original female mage.",
+              "voice_presentation": "feminine"},
+        files={"image": ("mira.png", b"\x89PNG\r\n\x1a\neditable", "image/png")},
+    ).json()["characters"][0]
+    voice = cast["casting"]["voice_candidates"][0]["voice"]
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{cast['id']}/select-voice", json={"voice": voice}
+    ).status_code == 200
+    locked = client.post(
+        f"/api/projects/{project['id']}/characters/{cast['id']}/lock"
+    ).json()["characters"][0]
+
+    edited = client.patch(
+        f"/api/projects/{project['id']}/characters/{cast['id']}",
+        json={"name": "Mira Vale", "brief": "A calm original mage who now guards the tower."},
+    )
+    assert edited.status_code == 200
+    character = edited.json()["characters"][0]
+    assert character["name"] == "Mira Vale"
+    assert character["brief"].endswith("guards the tower.")
+    assert character["voice_locked"] is True
+    assert character["casting"]["voice"] == locked["casting"]["voice"]
+    assert character["casting"]["character"] == "Mira Vale"
+
+
+def test_character_delete_is_recoverable_and_clears_addressee(isolated_project_store, tmp_path):
+    project = client.post("/api/projects", json={
+        "title": "Delete Cast", "scene": "Bridge", "background": "Two original allies on a bridge.",
+    }).json()
+    for name in ("Ari", "Bram"):
+        response = client.post(
+            f"/api/projects/{project['id']}/characters",
+            data={"name": name, "brief": f"{name} is an original game character.",
+                  "voice_presentation": "neutral"},
+            files={"image": (f"{name}.png", b"\x89PNG\r\n\x1a\ndelete-test", "image/png")},
+        )
+        assert response.status_code == 201
+        project = response.json()
+    ari, bram = project["characters"]
+    project = client.post(
+        f"/api/projects/{project['id']}/characters/{ari['id']}/dialogues",
+        json={"emotion": "calm", "text": "Wait here.", "addressee_id": bram["id"]},
+    ).json()
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{bram['id']}/dialogues",
+        json={"emotion": "steady", "text": "Understood.", "addressee_id": ari["id"]},
+    ).status_code == 201
+
+    deleted = client.delete(f"/api/projects/{project['id']}/characters/{bram['id']}")
+    assert deleted.status_code == 200
+    remaining = deleted.json()["characters"]
+    assert [character["id"] for character in remaining] == [ari["id"]]
+    assert remaining[0]["dialogues"][0]["addressee_id"] is None
+    trash = tmp_path / "project-trash" / "characters"
+    archived = next(path for path in trash.iterdir() if bram["id"] in path.name)
+    assert (archived / "character.json").is_file()
+    assert any(path.suffix == ".png" for path in archived.iterdir())

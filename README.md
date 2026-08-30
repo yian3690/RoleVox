@@ -176,10 +176,12 @@ Firestore and dispatching work through Cloud Tasks so jobs survive instance rest
 - `GET /api/health` — runtime mode, model IDs, and configuration state
 - `GET /api/voices` — the 30 allowed system voices
 - `POST /api/projects` — create a persistent RoleVox project
+- `GET /api/projects` — list saved projects for the Project Library
 - `POST /api/projects/{id}/characters` — multimodal Visual Casting for a Character Card
 - `POST /api/projects/{id}/characters/{character-id}/lock` — lock its Voice Identity
+- `POST /api/projects/{id}/characters/{character-id}/unlock` — unlock it before recasting or review
 - `POST /api/projects/{id}/characters/{character-id}/dialogues` — add an emotion-directed line
-- `POST /api/projects/{id}/produce` — run Draft, Production, or Cinematic agentic production
+- `POST /api/projects/{id}/produce` — produce one selected character or the full cast
 - `POST /api/jobs` — validate and enqueue a production
 - `POST /api/jobs/with-references` — enqueue multipart production with mapped character images
 - `GET /api/jobs/{id}` — progress, agent event trace, and result

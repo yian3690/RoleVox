@@ -12,3 +12,13 @@ __pycache__/
 node_modules/
 dist/
 build/
+
+# Runtime-generated RoleVox data
+artifacts/
+
+# Test and tooling caches
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/

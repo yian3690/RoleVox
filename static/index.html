@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -9,6 +9,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;600&family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/project-library.css">
+  <link rel="stylesheet" href="/rolevox-enhancements.css">
+  <link rel="stylesheet" href="/dialogue-composer.css">
+  <link rel="stylesheet" href="/production-modes.css">
+  <link rel="stylesheet" href="/editable-metadata.css">
+  <link rel="stylesheet" href="/character-preview.css">
 </head>
 <body>
   <div class="grain"></div>
@@ -21,9 +27,18 @@
     <section class="hero">
       <div class="eyebrow">PROJECT-LEVEL VOICE IDENTITY · ZH / JA / EN</div>
       <h1>One character.<br><em>One voice. Every line.</em></h1>
-      <p>ROLEVOX 把角色圖片、設定、場景與台詞組合成可鎖定的聲音身份，並聆聽每次演出、自動導演下一個 Take。</p>
+      <p>ROLEVOX combines character images, creative briefs, scenes, and dialogue into a lockable voice identity—then listens to every performance and directs the next take automatically.</p>
     </section>
 
+    <section class="app-shell">
+      <aside class="project-sidebar">
+        <div class="project-sidebar-head"><div class="sidebar-title"><span class="kicker">PROJECT LIBRARY</span><h2>Your worlds</h2></div>
+          <div class="sidebar-head-actions"><button id="collapseProjects" class="collapse-projects" type="button" aria-label="Collapse project library" title="Collapse project library">‹</button>
+          <button id="newProjectBtn" class="new-project-button" type="button" aria-label="New project">＋</button></div></div>
+        <button id="newProjectAction" class="sidebar-create" type="button"><span>NEW PROJECT</span><b>＋</b></button>
+        <div id="projectList" class="project-list"><div class="project-list-empty">LOADING PROJECTS…</div></div>
+      </aside>
+      <div class="app-content">
     <section id="projectCreator" class="creator-shell">
       <div class="section-heading">
         <div><span class="kicker">STEP 01 · CREATE PROJECT</span><h2>Start with the world, not the waveform.</h2></div>
@@ -33,7 +48,7 @@
         <label>PROJECT NAME<input id="projectTitle" maxlength="80" placeholder="e.g. Ashes of Aster" required></label>
         <label>SCENE<input id="projectScene" maxlength="80" placeholder="e.g. The Last Gate" required></label>
         <label class="wide">WORLD & SCENE BACKGROUND
-          <textarea id="projectBackground" maxlength="4000" placeholder="世界觀、故事背景、場景張力、角色關係與此刻正在發生的事…" required></textarea>
+          <textarea id="projectBackground" maxlength="4000" placeholder="Describe the world, story context, scene tension, character relationships, and what is happening now…" required></textarea>
         </label>
         <button type="submit" class="primary-action"><span>CREATE ROLEVOX PROJECT</span><b>→</b></button>
         <p id="projectError" class="error" hidden></p>
@@ -43,7 +58,8 @@
     <section id="studio" class="studio" hidden>
       <header class="studio-header">
         <div><span class="kicker">ACTIVE PROJECT</span><h2 id="studioTitle"></h2><p id="studioContext"></p></div>
-        <div class="project-badge"><span>PROJECT ID</span><strong id="projectId"></strong></div>
+        <div class="project-header-actions"><button id="editProjectDetails" type="button">EDIT PROJECT</button>
+          <div class="project-badge"><span>PROJECT ID</span><strong id="projectId"></strong></div></div>
       </header>
 
       <div class="studio-layout">
@@ -67,14 +83,21 @@
               <div><span class="kicker">STEP 02 · BUILD THE CAST</span><h2>Visual Casting</h2></div>
               <span id="castCount" class="counter">0 CHARACTERS</span>
             </div>
-            <p class="section-copy">角色圖片不是裝飾。Casting Agent 會把視覺線索、Character Brief、場景背景結合成可重用的 Character Voice Profile。</p>
+            <p class="section-copy">Character images are part of the reasoning. The Casting Agent combines visual cues, the Character Brief, and scene context into a reusable Character Voice Profile.</p>
             <form id="characterForm" class="character-form">
-              <label>CHARACTER NAME<input id="characterName" maxlength="80" placeholder="原創角色名稱" required></label>
+              <label>CHARACTER NAME<input id="characterName" maxlength="80" placeholder="Original character name" required></label>
+              <label>VOICE PRESENTATION
+                <select id="characterVoicePresentation">
+                  <option value="auto">AI DECIDES</option><option value="feminine">FEMININE VOICE</option>
+                  <option value="masculine">MASCULINE VOICE</option><option value="neutral">NEUTRAL VOICE</option>
+                </select>
+              </label>
               <label>CHARACTER IMAGE
-                <input id="characterImage" type="file" accept="image/png,image/jpeg,image/webp" required>
+                <span class="file-control"><input id="characterImage" type="file" accept="image/png,image/jpeg,image/webp" required>
+                  <b>CHOOSE IMAGE</b><em id="imageFileName">NO FILE SELECTED</em></span>
               </label>
               <label class="wide">CHARACTER BRIEF
-                <textarea id="characterBrief" maxlength="1000" placeholder="角色背景、性格、年齡感、說話習慣、與此場景的關係…" required></textarea>
+                <textarea id="characterBrief" maxlength="1000" placeholder="Describe the character's background, personality, perceived age, speaking habits, and relationship to this scene…" required></textarea>
               </label>
               <button id="castBtn" type="submit" class="secondary-action"><span>ANALYZE IMAGE & CAST VOICE</span><b>＋</b></button>
               <p id="characterError" class="error wide" hidden></p>
@@ -90,12 +113,43 @@
               <span id="readiness" class="readiness">WAITING FOR CAST</span>
             </div>
 
+            <fieldset class="generation-mode-picker">
+              <legend>GENERATION TYPE</legend>
+              <label><input type="radio" name="generationMode" value="single"><span><b>Single Character</b><small>One-off line · does not change the project script</small></span><i>01</i></label>
+              <label><input type="radio" name="generationMode" value="dialogue" checked><span><b>Dialogue</b><small>Context-aware multi-character script</small></span><i>02</i></label>
+            </fieldset>
+
             <fieldset class="language-picker">
               <legend>VOICE OUTPUT LANGUAGE <span>All dialogue is translated before performance</span></legend>
-              <label><input type="radio" name="targetLanguage" value="zh" checked><span><b>中文</b><small>Traditional Chinese</small></span><i>ZH</i></label>
-              <label><input type="radio" name="targetLanguage" value="ja"><span><b>日本語</b><small>Japanese</small></span><i>JA</i></label>
+              <label><input type="radio" name="targetLanguage" value="zh" checked><span><b>Chinese</b><small>Traditional Chinese (Taiwan)</small></span><i>ZH</i></label>
+              <label><input type="radio" name="targetLanguage" value="ja"><span><b>Japanese</b><small>Japanese</small></span><i>JA</i></label>
               <label><input type="radio" name="targetLanguage" value="en"><span><b>English</b><small>International English</small></span><i>EN</i></label>
             </fieldset>
+
+            <section id="singleGenerationPanel" class="single-generation-panel" hidden>
+              <div class="single-generation-heading"><div><span class="kicker">SINGLE CHARACTER PERFORMANCE</span><h3>Direct one line</h3>
+                <p>This input is used only for the current generation and will not be added to the Project Dialogue Script.</p></div><span>ONE-OFF</span></div>
+              <div class="single-generation-form">
+                <label>CHARACTER<select id="productionCharacter"></select></label>
+                <label>VOICE EMOTION<input id="singleVoiceEmotion" maxlength="80" placeholder="Calm · guarded · quietly determined"></label>
+                <label class="single-text-field">DIALOGUE TEXT<textarea id="singleDialogueText" maxlength="4000" placeholder="Enter the line to generate. It will be translated into the selected output language before performance."></textarea></label>
+              </div>
+            </section>
+
+            <section id="dialogueGenerationPanel" class="project-dialogue-panel">
+              <div class="dialogue-panel-heading"><div><span class="kicker">PROJECT DIALOGUE SCRIPT</span><h3>Build the conversation in context</h3>
+                <p>The AI infers who is being addressed from surrounding lines. You can also specify the addressee manually for precise control.</p></div><strong id="projectDialogueCount">0 LINES</strong></div>
+              <form id="projectDialogueForm">
+                <label>SPEAKER<select id="dialogueSpeaker" required></select></label>
+                <label>SPEAKING TO<select id="dialogueAddressee"><option value="">AI · INFER FROM CONTEXT</option></select></label>
+                <label>VOICE EMOTION<input id="projectDialogueEmotion" maxlength="80" placeholder="Fearful · restrained · urgent" required></label>
+                <label class="dialogue-text-field">DIALOGUE TEXT<textarea id="projectDialogueText" maxlength="4000" placeholder="Enter dialogue in any supported input language. It will be translated into the selected output language before performance." required></textarea></label>
+                <div class="dialogue-form-actions"><button id="cancelDialogueEdit" type="button" hidden>CANCEL EDIT</button>
+                  <button id="saveDialogueLine" type="submit" class="secondary-action"><span>ADD NEXT LINE</span><b>＋</b></button></div>
+                <p id="projectDialogueError" class="error" hidden></p>
+              </form>
+              <div id="projectDialogueList" class="project-dialogue-list"><div class="empty-dialogue">ADD A CHARACTER, THEN WRITE THE FIRST LINE</div></div>
+            </section>
 
             <fieldset class="mode-picker">
               <legend>PRODUCTION TARGET</legend>
@@ -129,6 +183,8 @@
         </div>
       </div>
     </section>
+      </div>
+    </section>
 
     <section id="results" class="results" hidden>
       <div class="section-heading">
@@ -143,6 +199,49 @@
   <dialog id="characterDialog">
     <button id="closeDialog" class="dialog-close" aria-label="Close">×</button>
     <div id="dialogContent"></div>
+  </dialog>
+  <dialog id="characterImageLightbox" class="character-image-lightbox">
+    <button id="closeImageLightbox" class="dialog-close" type="button" aria-label="Close">×</button>
+    <img id="lightboxCharacterImage" alt="Character full reference">
+    <div><span class="kicker">FULL CHARACTER REFERENCE</span><strong id="lightboxCharacterName"></strong></div>
+  </dialog>
+  <dialog id="deleteCharacterDialog" class="delete-character-dialog">
+    <form id="deleteCharacterForm">
+      <span class="kicker">DELETE CHARACTER</span><h2 id="deleteCharacterTitle">Delete character?</h2>
+      <p>The character card, image, and project dialogue lines will be moved to the recoverable project-trash folder. Existing WAV and ZIP assets will not be affected.</p>
+      <div><button id="cancelDeleteCharacter" type="button">CANCEL</button><button id="confirmDeleteCharacter" type="submit">DELETE CHARACTER</button></div>
+      <p id="deleteCharacterError" class="error" hidden></p>
+    </form>
+  </dialog>
+
+  <div id="projectContextMenu" class="project-context-menu" hidden>
+    <button type="button" data-action="rename">RENAME PROJECT</button>
+    <button type="button" data-action="delete" class="danger">DELETE PROJECT</button>
+  </div>
+  <dialog id="projectActionDialog" class="project-action-dialog">
+    <form id="projectActionForm">
+      <span id="projectActionKicker" class="kicker">PROJECT SETTINGS</span>
+      <h2 id="projectActionTitle">Rename project</h2>
+      <p id="projectActionCopy"></p>
+      <label id="projectRenameLabel">PROJECT NAME<input id="projectRenameInput" maxlength="80" required></label>
+      <div class="project-action-buttons">
+        <button id="cancelProjectAction" type="button">CANCEL</button>
+        <button id="confirmProjectAction" type="submit">SAVE NAME</button>
+      </div>
+      <p id="projectActionError" class="error" hidden></p>
+    </form>
+  </dialog>
+  <dialog id="projectDetailsDialog" class="project-details-dialog">
+    <button id="closeProjectDetails" class="dialog-close" type="button" aria-label="Close">×</button>
+    <form id="projectDetailsForm">
+      <span class="kicker">PROJECT DETAILS</span><h2>Edit world settings</h2>
+      <p>Updates apply to the next Director, Translation, and Voice Production run without changing any locked voice identity.</p>
+      <label>PROJECT NAME<input id="editProjectTitle" maxlength="80" required></label>
+      <label>SCENE<input id="editProjectScene" maxlength="80" required></label>
+      <label>WORLD &amp; SCENE BACKGROUND<textarea id="editProjectBackground" maxlength="4000" required></textarea></label>
+      <button id="saveProjectDetails" class="secondary-action" type="submit"><span>SAVE PROJECT DETAILS</span><b>✓</b></button>
+      <p id="projectDetailsError" class="error" hidden></p>
+    </form>
   </dialog>
 
   <footer><span>ROLEVOX · GAME CHARACTER VOICE SYSTEM</span><span>GEMINI 3.5 + VERTEX AI + GOOGLE ADK</span></footer>
