@@ -1,0 +1,350 @@
+{
+  "project": "Tri-Language Test",
+  "scene": "Gate",
+  "background": "",
+  "target_language": "zh",
+  "target_language_name": "Traditional Chinese (Taiwan)",
+  "demo_mode": true,
+  "production_mode": "production",
+  "production_target": 78,
+  "agent_revision_limit": 1,
+  "backend": "demo",
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "character_references": [
+    {
+      "character": "璃央",
+      "description": "",
+      "has_image": false,
+      "source_filename": null
+    },
+    {
+      "character": "Mara",
+      "description": "",
+      "has_image": false,
+      "source_filename": null
+    },
+    {
+      "character": "レン",
+      "description": "",
+      "has_image": false,
+      "source_filename": null
+    }
+  ],
+  "direction": {
+    "genre": "cinematic adventure",
+    "setting": "Gate",
+    "stakes": "The characters must make a consequential choice.",
+    "emotional_arc": "tension to resolve",
+    "language_policy": "preserve each line"
+  },
+  "casting": [
+    {
+      "character": "璃央",
+      "voice": "Zephyr",
+      "profile": "original bright fictional voice",
+      "emotion_baseline": "scene-aware",
+      "perceived_archetype": "Fictional game character",
+      "visual_tone": "Distinct · scene-aware · readable",
+      "suggested_register": "Mid register",
+      "delivery_style": "Measured · calm",
+      "voice_texture": "Clear",
+      "confidence": 87,
+      "visual_analysis": "Image silhouette, costume, posture and brief were combined for casting.",
+      "voice_identity": {
+        "voice": "Zephyr",
+        "qualities": "Bright",
+        "pitch": "Medium",
+        "texture": "Clear",
+        "speaking_style": "Reserved",
+        "accent": "Neutral",
+        "locked": false
+      },
+      "rationale": "Deterministic Demo Mode casting"
+    },
+    {
+      "character": "Mara",
+      "voice": "Puck",
+      "profile": "original upbeat fictional voice",
+      "emotion_baseline": "scene-aware",
+      "perceived_archetype": "Fictional game character",
+      "visual_tone": "Distinct · scene-aware · readable",
+      "suggested_register": "Low-mid register",
+      "delivery_style": "Measured · calm",
+      "voice_texture": "Slightly breathy",
+      "confidence": 87,
+      "visual_analysis": "Image silhouette, costume, posture and brief were combined for casting.",
+      "voice_identity": {
+        "voice": "Puck",
+        "qualities": "Upbeat",
+        "pitch": "Medium-low",
+        "texture": "Slightly breathy",
+        "speaking_style": "Reserved",
+        "accent": "Neutral",
+        "locked": false
+      },
+      "rationale": "Deterministic Demo Mode casting"
+    },
+    {
+      "character": "レン",
+      "voice": "Charon",
+      "profile": "original informative fictional voice",
+      "emotion_baseline": "scene-aware",
+      "perceived_archetype": "Fictional game character",
+      "visual_tone": "Distinct · scene-aware · readable",
+      "suggested_register": "Mid register",
+      "delivery_style": "Measured · calm",
+      "voice_texture": "Clear",
+      "confidence": 87,
+      "visual_analysis": "Image silhouette, costume, posture and brief were combined for casting.",
+      "voice_identity": {
+        "voice": "Charon",
+        "qualities": "Informative",
+        "pitch": "Medium",
+        "texture": "Clear",
+        "speaking_style": "Reserved",
+        "accent": "Neutral",
+        "locked": false
+      },
+      "rationale": "Deterministic Demo Mode casting"
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "璃央",
+      "text": "不要回頭。",
+      "source_text": "不要回頭。",
+      "target_language": "zh",
+      "emotion": "determined",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Zephyr",
+      "file": "璃央_Gate_001.wav",
+      "url": "/api/jobs/e900bcbedbc3/files/璃央_Gate_001.wav",
+      "qa": {
+        "score": 78,
+        "overall": 78,
+        "emotion_match": 72,
+        "character_consistency": 91,
+        "pronunciation": 96,
+        "scene_fit": 67,
+        "pace": 76,
+        "volume": 88,
+        "consistency": 91,
+        "verdict": "retry",
+        "feedback": "Scene requires stronger fear and a lower speaking pace.",
+        "revision": {
+          "emotion": {
+            "from": 52,
+            "to": 76
+          },
+          "speaking_rate": {
+            "from": 1.02,
+            "to": 0.87
+          },
+          "breathiness_delta": 18,
+          "pause_delta_seconds": 0.35,
+          "revised_pace": "slow"
+        }
+      },
+      "attempts": 1,
+      "selected_take": 1,
+      "approved": true,
+      "takes": [
+        {
+          "take": 1,
+          "file": "璃央_Gate_001_take01.wav",
+          "url": "/api/jobs/e900bcbedbc3/files/璃央_Gate_001_take01.wav",
+          "approved": true,
+          "qa": {
+            "score": 78,
+            "overall": 78,
+            "emotion_match": 72,
+            "character_consistency": 91,
+            "pronunciation": 96,
+            "scene_fit": 67,
+            "pace": 76,
+            "volume": 88,
+            "consistency": 91,
+            "verdict": "retry",
+            "feedback": "Scene requires stronger fear and a lower speaking pace.",
+            "revision": {
+              "emotion": {
+                "from": 52,
+                "to": 76
+              },
+              "speaking_rate": {
+                "from": 1.02,
+                "to": 0.87
+              },
+              "breathiness_delta": 18,
+              "pause_delta_seconds": 0.35,
+              "revised_pace": "slow"
+            }
+          },
+          "revision": null
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "character": "Mara",
+      "text": "繼續前進。",
+      "source_text": "Keep moving.",
+      "target_language": "zh",
+      "emotion": "worried",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Puck",
+      "file": "Mara_Gate_002.wav",
+      "url": "/api/jobs/e900bcbedbc3/files/Mara_Gate_002.wav",
+      "qa": {
+        "score": 78,
+        "overall": 78,
+        "emotion_match": 72,
+        "character_consistency": 91,
+        "pronunciation": 96,
+        "scene_fit": 67,
+        "pace": 76,
+        "volume": 88,
+        "consistency": 91,
+        "verdict": "retry",
+        "feedback": "Scene requires stronger fear and a lower speaking pace.",
+        "revision": {
+          "emotion": {
+            "from": 52,
+            "to": 76
+          },
+          "speaking_rate": {
+            "from": 1.02,
+            "to": 0.87
+          },
+          "breathiness_delta": 18,
+          "pause_delta_seconds": 0.35,
+          "revised_pace": "slow"
+        }
+      },
+      "attempts": 1,
+      "selected_take": 1,
+      "approved": true,
+      "takes": [
+        {
+          "take": 1,
+          "file": "Mara_Gate_002_take01.wav",
+          "url": "/api/jobs/e900bcbedbc3/files/Mara_Gate_002_take01.wav",
+          "approved": true,
+          "qa": {
+            "score": 78,
+            "overall": 78,
+            "emotion_match": 72,
+            "character_consistency": 91,
+            "pronunciation": 96,
+            "scene_fit": 67,
+            "pace": 76,
+            "volume": 88,
+            "consistency": 91,
+            "verdict": "retry",
+            "feedback": "Scene requires stronger fear and a lower speaking pace.",
+            "revision": {
+              "emotion": {
+                "from": 52,
+                "to": 76
+              },
+              "speaking_rate": {
+                "from": 1.02,
+                "to": 0.87
+              },
+              "breathiness_delta": 18,
+              "pause_delta_seconds": 0.35,
+              "revised_pace": "slow"
+            }
+          },
+          "revision": null
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "character": "レン",
+      "text": "交給我。",
+      "source_text": "任せて。",
+      "target_language": "zh",
+      "emotion": "hopeful",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Charon",
+      "file": "レン_Gate_003.wav",
+      "url": "/api/jobs/e900bcbedbc3/files/レン_Gate_003.wav",
+      "qa": {
+        "score": 78,
+        "overall": 78,
+        "emotion_match": 72,
+        "character_consistency": 91,
+        "pronunciation": 96,
+        "scene_fit": 67,
+        "pace": 76,
+        "volume": 88,
+        "consistency": 91,
+        "verdict": "retry",
+        "feedback": "Scene requires stronger fear and a lower speaking pace.",
+        "revision": {
+          "emotion": {
+            "from": 52,
+            "to": 76
+          },
+          "speaking_rate": {
+            "from": 1.02,
+            "to": 0.87
+          },
+          "breathiness_delta": 18,
+          "pause_delta_seconds": 0.35,
+          "revised_pace": "slow"
+        }
+      },
+      "attempts": 1,
+      "selected_take": 1,
+      "approved": true,
+      "takes": [
+        {
+          "take": 1,
+          "file": "レン_Gate_003_take01.wav",
+          "url": "/api/jobs/e900bcbedbc3/files/レン_Gate_003_take01.wav",
+          "approved": true,
+          "qa": {
+            "score": 78,
+            "overall": 78,
+            "emotion_match": 72,
+            "character_consistency": 91,
+            "pronunciation": 96,
+            "scene_fit": 67,
+            "pace": 76,
+            "volume": 88,
+            "consistency": 91,
+            "verdict": "retry",
+            "feedback": "Scene requires stronger fear and a lower speaking pace.",
+            "revision": {
+              "emotion": {
+                "from": 52,
+                "to": 76
+              },
+              "speaking_rate": {
+                "from": 1.02,
+                "to": 0.87
+              },
+              "breathiness_delta": 18,
+              "pause_delta_seconds": 0.35,
+              "revised_pace": "slow"
+            }
+          },
+          "revision": null
+        }
+      ]
+    }
+  ]
+}

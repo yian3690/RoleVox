@@ -1,0 +1,116 @@
+{
+  "id": "961e45e73f75",
+  "title": "Ashes of Aster",
+  "scene": "The Last Gate",
+  "background": "城門即將失守，角色正在爭執是否開門",
+  "characters": [
+    {
+      "id": "3da95e8b6f",
+      "name": "艾莉亞",
+      "brief": "Role: Young female swordswoman / wandering warrior\r\nPersonality: Calm, disciplined, vigilant, resilient, protective, emotionally restrained\r\nVoice: Young female, medium-low pitch, slightly husky, controlled and confident\r\nSpeaking Style: Concise, direct, deliberate; rarely wastes words\r\nEmotional Range: Restrained by default; sharp and commanding in combat; softer and quieter with trusted companions\r\nBackground: A battle-hardened swordswoman who has survived years of conflict and learned to rely on observation, discipline, and decisive action\r\nCurrent Scene State: Alert and cautious, sensing possible danger and prepared to fight at any moment",
+      "image_filename": "女戰士-艾莉亞.jpg",
+      "image_mime_type": "image/jpeg",
+      "image_storage_name": "3da95e8b6f.jpg",
+      "casting": {
+        "character": "艾莉亞",
+        "voice": "Leda",
+        "profile": "A grounded, steady, and slightly husky young female voice. It carries a natural weight and quiet authority, reflecting a life of discipline and survival without losing its youthful core.",
+        "emotion_baseline": "Vigilant and restrained, with an underlying tension of readiness.",
+        "perceived_archetype": "The Disciplined Protector / Wandering Warrior",
+        "visual_tone": "Cool-toned, gritty historical fantasy with sharp contrast",
+        "suggested_register": "Medium-low",
+        "delivery_style": "Deliberate, concise, and measured, with a sharp, commanding edge when threatened.",
+        "voice_texture": "Slightly husky, dry, and firmly grounded.",
+        "confidence": 95,
+        "visual_analysis": "The character is depicted walking forward with a steady, upright posture, holding a drawn sword with a firm grip. Her expression is intensely focused and calm, with a direct, vigilant gaze. She wears blue and red traditional martial robes with leather arm guards and a high hair bun, conveying a highly disciplined, combat-ready status. The cool, gritty background tones contrast with the sharp red sash, emphasizing her alert and protective nature.",
+        "voice_identity": {
+          "voice": "Leda",
+          "qualities": [
+            "grounded",
+            "disciplined",
+            "protective",
+            "resolute"
+          ],
+          "pitch": "Medium-low",
+          "texture": "Slightly husky, dry",
+          "speaking_style": "Measured, concise, direct",
+          "accent": "Neutral",
+          "locked": true
+        },
+        "rationale": "The character's disciplined posture, intense focus, and warrior attire demand a voice that is both youthful and battle-hardened. 'Leda' provides the perfect balance of a medium-low, slightly husky tone that sounds grounded, protective, and emotionally restrained, matching her current state of high alert at the falling gate.",
+        "voice_locked": true
+      },
+      "voice_locked": true,
+      "dialogues": [
+        {
+          "id": "59d2fbfb3a",
+          "emotion": "Fearful · restrained · urgent",
+          "text": "別出聲……有東西正在靠近。拔劍，但先不要動手。"
+        },
+        {
+          "id": "456a22b81f",
+          "emotion": "Calm · vigilant · controlled",
+          "text": "前面的路不對勁。跟緊我，別離開我的視線。"
+        }
+      ]
+    },
+    {
+      "id": "d2fa5272c1",
+      "name": "奧德里克王",
+      "brief": "Role: Elderly King / Veteran Monarch\r\nAge Impression: 65–75\r\nPersonality: Wise, authoritative, calculating, restrained, proud, weary\r\nVoice: Elderly male, deep and resonant, slightly raspy, aged texture\r\nSpeaking Style: Slow, deliberate, formal, commanding; meaningful pauses between important phrases\r\nEmotional Range: Usually controlled and dignified; cold toward enemies; solemn during crises; quietly vulnerable in private moments\r\nBackground: A veteran ruler who has survived decades of war, political intrigue, betrayal, and personal loss\r\nCurrent Scene State: Maintaining royal composure while facing an approaching crisis, concealing exhaustion and uncertainty behind authority",
+      "image_filename": "奧德里克王.png",
+      "image_mime_type": "image/png",
+      "image_storage_name": "d2fa5272c1.png",
+      "casting": {
+        "character": "奧德里克王",
+        "voice": "Iapetus",
+        "profile": "A deep, weathered, and resonant baritone-bass voice carrying the immense weight of age and authority. It has a dry, gravelly texture that speaks of decades of command, yet retains a powerful, steady core that demands absolute attention.",
+        "emotion_baseline": "Weary but resolute; maintaining a facade of absolute royal composure despite underlying exhaustion and tension.",
+        "perceived_archetype": "The Sovereign / The Weary Patriarch",
+        "visual_tone": "Chiaroscuro, regal, somber, and highly detailed, emphasizing the textures of age and heavy fabrics.",
+        "suggested_register": "Deep Baritone to Low Bass",
+        "delivery_style": "Slow, deliberate, and formal, with measured pauses and a commanding, quiet intensity.",
+        "voice_texture": "Gravelly, dry, resonant, and aged",
+        "confidence": 95,
+        "visual_analysis": "The character is depicted as an elderly monarch with deeply etched facial wrinkles, a prominent brow, and a long, flowing grey beard and hair. He wears a heavy, ornate golden crown adorned with large green gems, and is draped in rich, textured robes of deep orange and dark grey. His expression is solemn, weary, and calculating, with intense eyes that convey a lifetime of heavy decisions. His posture is dignified yet burdened, matching the archetype of a veteran ruler facing a crisis.",
+        "voice_identity": {
+          "voice": "Iapetus",
+          "qualities": [
+            "authoritative",
+            "weathered",
+            "resonant",
+            "solemn",
+            "weary"
+          ],
+          "pitch": "Very Low",
+          "texture": "Gravelly and dry",
+          "speaking_style": "Deliberate, measured, and formal with dramatic pauses",
+          "accent": "Classical theatrical non-regional",
+          "locked": true
+        },
+        "rationale": "The visual cues of deep wrinkles, a massive grey beard, and a heavy crown strongly suggest an elderly, powerful, and weary ruler. The voice 'Iapetus' provides the ideal deep, resonant, and weathered baritone-bass quality needed to portray a veteran king who must maintain authority and composure during a desperate siege at the city gates.",
+        "voice_locked": true
+      },
+      "voice_locked": true,
+      "dialogues": [
+        {
+          "id": "9ebd80eb63",
+          "emotion": "Authoritative · calm · commanding",
+          "text": "抬起頭。站在王座之前的人，不需要用恐懼回答我。"
+        },
+        {
+          "id": "b52db41efa",
+          "emotion": "Cold · threatening · controlled",
+          "text": "我給過你一次忠誠的機會。不要逼我給你第二種選擇。"
+        },
+        {
+          "id": "acc498282a",
+          "emotion": "Weary · reflective · restrained",
+          "text": "我坐在這張王座上四十年……卻從未有一天真正屬於自己。"
+        }
+      ]
+    }
+  ],
+  "created_at": "2026-08-30T10:00:32.681687+00:00",
+  "updated_at": "2026-08-30T10:43:01.251895+00:00"
+}

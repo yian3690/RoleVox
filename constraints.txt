@@ -1,0 +1,3 @@
+# Pin the compatible ADK/GenAI pair to avoid resolver backtracking.
+google-adk==2.8.0
+google-genai==2.20.0

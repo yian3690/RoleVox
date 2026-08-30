@@ -1,0 +1,106 @@
+{
+  "project": "Echoes of Aster",
+  "scene": "Temple Entrance",
+  "target_language": "ja",
+  "target_language_name": "Japanese",
+  "demo_mode": false,
+  "backend": "vertex-ai",
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "character_references": [
+    {
+      "character": "羅賓",
+      "description": "",
+      "has_image": true,
+      "source_filename": "羅賓.jpg"
+    },
+    {
+      "character": "迪亞波羅",
+      "description": "",
+      "has_image": true,
+      "source_filename": "迪亞波蘿.jpg"
+    }
+  ],
+  "direction": {
+    "genre": "Fantasy RPG / Adventure",
+    "setting": "The ominous entrance of an ancient, silent temple. A massive, sealed door looms ahead, concealing an unknown entity.",
+    "stakes": "Immediate physical danger. An unidentified creature is breathing on the other side of the door, threatening an ambush.",
+    "emotional_arc": "Shifts from tense, whispered apprehension (Robin) to calm, fiercely loyal confidence (Diablo).",
+    "performance_notes": "羅賓 (Robin) should speak in a hushed, breathy whisper, conveying high tension and alertness. 迪亞波羅 (Diablo) must sound completely unfazed, elegant, and deeply devoted, delivering his line with smooth, chilling confidence.",
+    "pronunciation_risks": "羅賓 (Luóbīn): Ensure natural Chinese phrasing. 迪亞波羅 (Díyàbōluó): Maintain smooth flow across all four syllables. 利姆路 (Lìmǔlù): Pronounce clearly as the Chinese transliteration of 'Rimuru', followed immediately by the honorific '大人' (dàrén)."
+  },
+  "casting": [
+    {
+      "character": "羅賓",
+      "voice": "Leda",
+      "profile": "A mature, velvety female voice with a smooth, low-mid register. It carries a natural air of intelligence and quiet composure, capable of dropping into a soft, breathy whisper without losing clarity.",
+      "emotion_baseline": "Tense, whispered apprehension, shifting into highly alert and cautious observation.",
+      "visual_analysis": "An athletic female figure with long, straight dark hair and a poised, upright posture. She wears a casual pink tank top and sunglasses pushed up on her head, presenting a calm exterior that belies her sharp, watchful gaze.",
+      "rationale": "Leda's mature and composed vocal profile perfectly matches Robin's intelligent, calm visual archetype, while providing the breathy control needed to deliver tense, whispered lines effectively in this high-stakes scene."
+    },
+    {
+      "character": "迪亞波羅",
+      "voice": "Umbriel",
+      "profile": "A smooth, resonant baritone with a theatrical, slightly dark elegance. The voice is characterized by its impeccable pacing, chillingly calm delivery, and an undercurrent of absolute, unwavering devotion.",
+      "emotion_baseline": "Completely unfazed, elegant, and deeply devoted, delivering lines with smooth, chilling confidence.",
+      "visual_analysis": "A slender, elegant male figure dressed in a formal black tailcoat, white vest, and white gloves. His theatrical posture, slight smirk, and sharp features convey a sense of refined power and absolute self-assurance.",
+      "rationale": "Umbriel's dark, smooth, and theatrical baritone aligns flawlessly with Diablo's elegant butler aesthetic and his requirement to deliver lines with chilling, unfazed confidence and fierce loyalty."
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "羅賓",
+      "text": "待って……扉の向こうで、何かが息をしている。",
+      "source_text": "等等……門後面有東西在呼吸。",
+      "target_language": "ja",
+      "emotion": "Tense, whispered apprehension",
+      "intensity": 0.75,
+      "pace": "slow",
+      "pause_notes": "A distinct, tense pause after '待って' (matte) to emphasize listening closely to the door.",
+      "pronunciation_notes": "Deliver in a hushed, breathy whisper. Ensure '扉の向こうで' (tobira no mukou de) is spoken with quiet alertness, and '息をしている' (iki o shite iru) trails off slightly to mimic holding one's breath.",
+      "voice": "Leda",
+      "file": "羅賓_Temple_Entrance_001.wav",
+      "url": "/api/jobs/655df914e724/files/羅賓_Temple_Entrance_001.wav",
+      "qa": {
+        "score": 95,
+        "emotion": 96,
+        "pace": 92,
+        "volume": 90,
+        "consistency": 95,
+        "pronunciation": 100,
+        "verdict": "pass",
+        "feedback": "Excellent whispered delivery that perfectly captures the tense, apprehensive atmosphere. The slow pacing and breathy execution align beautifully with the requested voice profile."
+      },
+      "attempts": 1
+    },
+    {
+      "id": 2,
+      "character": "迪亞波羅",
+      "text": "すぐに片付けてまいります、リムル様。",
+      "source_text": "我馬上就處理完，利姆路大人。",
+      "target_language": "ja",
+      "emotion": "Calm, elegant devotion",
+      "intensity": 0.4,
+      "pace": "measured",
+      "pause_notes": "A brief, respectful pause before addressing his master with 'リムル様' (Rimuru-sama).",
+      "pronunciation_notes": "Maintain a smooth, theatrical baritone. 'すぐに片付けてまいります' (sugu ni katadukete mairimasu) should sound effortless and chillingly confident, while 'リムル様' (Rimuru-sama) is spoken with absolute reverence.",
+      "voice": "Umbriel",
+      "file": "迪亞波羅_Temple_Entrance_002.wav",
+      "url": "/api/jobs/655df914e724/files/迪亞波羅_Temple_Entrance_002.wav",
+      "qa": {
+        "score": 95,
+        "emotion": 96,
+        "pace": 92,
+        "volume": 90,
+        "consistency": 95,
+        "pronunciation": 98,
+        "verdict": "pass",
+        "feedback": "Excellent delivery. The calm, elegant devotion is perfectly captured with a smooth, theatrical, and slightly dark tone. The pacing is beautifully measured."
+      },
+      "attempts": 1
+    }
+  ]
+}

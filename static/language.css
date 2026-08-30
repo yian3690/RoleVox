@@ -1,0 +1,13 @@
+.language-picker{border:0;padding:0;margin:24px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.language-picker legend{width:100%;padding:0 0 9px;font:500 9px "DM Mono",monospace;letter-spacing:.12em}
+.language-picker legend span{float:right;color:#77766e;letter-spacing:0}
+.language-picker label{position:relative;display:flex;flex-direction:row;align-items:center;justify-content:space-between;min-height:72px;padding:13px 14px;border:1px solid #cbc7ba;background:#f5f2ea;cursor:pointer;transition:.18s}
+.language-picker label:hover{border-color:#11110f}
+.language-picker label:has(input:checked){border-color:#11110f;background:#d8ff3e;box-shadow:3px 3px 0 #11110f;transform:translate(-2px,-2px)}
+.language-picker input{position:absolute;opacity:0;pointer-events:none}
+.language-picker label span{display:flex;flex-direction:column;gap:3px}
+.language-picker label b{font:700 14px Manrope,"Noto Sans TC","Noto Sans JP",sans-serif;letter-spacing:0}
+.language-picker label small{font:400 8px "DM Mono",monospace;color:#77766e;letter-spacing:0}
+.language-picker label i{font:500 10px "DM Mono",monospace;font-style:normal}
+.source-words{font:400 10px/1.5 "DM Mono","Noto Sans TC","Noto Sans JP",monospace;color:#77766e;text-decoration:line-through;text-decoration-color:#ff5b3560;margin-bottom:5px}
+@media(max-width:620px){.language-picker{grid-template-columns:1fr}.language-picker label{min-height:58px}.language-picker legend span{display:none}}

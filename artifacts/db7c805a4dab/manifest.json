@@ -1,0 +1,64 @@
+{
+  "project": "Reference Casting Test",
+  "scene": "Ruins",
+  "target_language": "en",
+  "target_language_name": "English",
+  "demo_mode": true,
+  "backend": "demo",
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "character_references": [
+    {
+      "character": "Mara",
+      "description": "A guarded knight who hides her fear behind calm precision.",
+      "has_image": true,
+      "source_filename": "mara.png"
+    }
+  ],
+  "direction": {
+    "genre": "cinematic adventure",
+    "setting": "Ruins",
+    "stakes": "The characters must make a consequential choice.",
+    "emotional_arc": "tension to resolve",
+    "language_policy": "preserve each line"
+  },
+  "casting": [
+    {
+      "character": "Mara",
+      "voice": "Schedar",
+      "profile": "original even fictional voice",
+      "emotion_baseline": "scene-aware",
+      "visual_analysis": "Reference received; real visual analysis requires Gemini mode.",
+      "rationale": "Deterministic Demo Mode casting"
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "Mara",
+      "text": "We go now.",
+      "source_text": "We go now.",
+      "target_language": "en",
+      "emotion": "determined",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Schedar",
+      "file": "Mara_Ruins_001.wav",
+      "url": "/api/jobs/db7c805a4dab/files/Mara_Ruins_001.wav",
+      "qa": {
+        "score": 86,
+        "emotion": 84,
+        "pace": 88,
+        "volume": 85,
+        "consistency": 87,
+        "pronunciation": 86,
+        "verdict": "pass",
+        "feedback": "Synthetic demo audio; real multimodal critique requires Gemini API."
+      },
+      "attempts": 1
+    }
+  ]
+}

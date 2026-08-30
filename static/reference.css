@@ -1,0 +1,24 @@
+.rolevox-mark{display:flex!important;align-items:center;justify-content:center;gap:2px;padding:7px}
+.rolevox-mark i{display:block;width:3px;background:#d8ff3e;border-radius:1px}
+.rolevox-mark i:nth-child(1){height:8px}.rolevox-mark i:nth-child(2){height:18px}.rolevox-mark i:nth-child(3){height:13px}.rolevox-mark i:nth-child(4){height:6px}
+.reference-section{margin-top:28px;border-top:1px solid #cbc7ba;padding-top:24px}
+.reference-head{display:flex;justify-content:space-between;align-items:flex-start}
+.reference-head h3{font-size:22px;letter-spacing:-.035em;margin:5px 0 0}
+.reference-hint{font:400 9px "DM Mono",monospace;border:1px solid #cbc7ba;padding:7px 9px}
+.reference-copy{max-width:650px;color:#77766e;font-size:11px;line-height:1.65;margin:12px 0 18px}
+.character-references{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.character-card{border:1px solid #cbc7ba;background:#f5f2ea;padding:14px;display:grid;grid-template-columns:112px minmax(0,1fr);gap:14px;min-height:168px}
+.reference-media{position:relative;background:#dedacf;border:1px dashed #aaa69a;overflow:hidden;min-height:138px}
+.reference-media img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.reference-upload{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;cursor:pointer;text-align:center;padding:12px;color:#77766e;font:500 9px/1.5 "DM Mono",monospace;letter-spacing:.05em}
+.reference-upload input{position:absolute;opacity:0;pointer-events:none}
+.reference-upload b{font-size:22px;color:#11110f;display:block;margin-bottom:5px}
+.reference-media.has-image .reference-upload{opacity:0;background:#11110fcc;color:white;transition:.2s}.reference-media.has-image:hover .reference-upload{opacity:1}
+.reference-info{display:flex;flex-direction:column;gap:9px;min-width:0}
+.character-name{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #cbc7ba;padding-bottom:8px}
+.character-name strong{font-size:14px}.character-name small{font:400 8px "DM Mono",monospace;color:#77766e}
+.reference-info label{flex:1}.reference-info textarea{min-height:92px;height:100%;padding:9px;font:400 10px/1.55 "DM Mono","Noto Sans TC","Noto Sans JP",monospace}
+.reference-file{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:400 8px "DM Mono",monospace;color:#77766e}
+.casting-note{display:block;margin-top:4px;font:400 8px/1.35 "DM Mono",monospace;color:#ff5b35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.no-characters{grid-column:1/-1;border:1px dashed #cbc7ba;padding:20px;text-align:center;color:#77766e;font:400 10px "DM Mono",monospace}
+@media(max-width:1050px){.character-references{grid-template-columns:1fr}}@media(max-width:520px){.character-card{grid-template-columns:90px minmax(0,1fr);padding:10px}.reference-media{min-height:130px}.reference-hint{display:none}}

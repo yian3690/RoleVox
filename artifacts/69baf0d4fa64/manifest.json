@@ -1,0 +1,104 @@
+{
+  "project": "Echoes of Aster",
+  "scene": "Temple Entrance",
+  "demo_mode": true,
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "direction": {
+    "genre": "cinematic adventure",
+    "setting": "Temple Entrance",
+    "stakes": "The characters must make a consequential choice.",
+    "emotional_arc": "tension to resolve",
+    "language_policy": "preserve each line"
+  },
+  "casting": [
+    {
+      "character": "璃央",
+      "voice": "Zephyr",
+      "profile": "original bright fictional voice"
+    },
+    {
+      "character": "Mara",
+      "voice": "Puck",
+      "profile": "original upbeat fictional voice"
+    },
+    {
+      "character": "レン",
+      "voice": "Charon",
+      "profile": "original informative fictional voice"
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "璃央",
+      "text": "等等……門後面有東西在呼吸。",
+      "emotion": "determined",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Zephyr",
+      "file": "璃央_Temple_Entrance_001.wav",
+      "url": "/api/jobs/69baf0d4fa64/files/璃央_Temple_Entrance_001.wav",
+      "qa": {
+        "score": 86,
+        "emotion": 84,
+        "pace": 88,
+        "volume": 85,
+        "consistency": 87,
+        "pronunciation": 86,
+        "verdict": "pass",
+        "feedback": "Synthetic demo audio; real multimodal critique requires Gemini API."
+      },
+      "attempts": 1
+    },
+    {
+      "id": 2,
+      "character": "Mara",
+      "text": "Then we stop running and face it together.",
+      "emotion": "worried",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Puck",
+      "file": "Mara_Temple_Entrance_002.wav",
+      "url": "/api/jobs/69baf0d4fa64/files/Mara_Temple_Entrance_002.wav",
+      "qa": {
+        "score": 86,
+        "emotion": 84,
+        "pace": 88,
+        "volume": 85,
+        "consistency": 87,
+        "pronunciation": 86,
+        "verdict": "pass",
+        "feedback": "Synthetic demo audio; real multimodal critique requires Gemini API."
+      },
+      "attempts": 1
+    },
+    {
+      "id": 3,
+      "character": "レン",
+      "text": "大丈夫。僕が先に行く。",
+      "emotion": "hopeful",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Charon",
+      "file": "レン_Temple_Entrance_003.wav",
+      "url": "/api/jobs/69baf0d4fa64/files/レン_Temple_Entrance_003.wav",
+      "qa": {
+        "score": 86,
+        "emotion": 84,
+        "pace": 88,
+        "volume": 85,
+        "consistency": 87,
+        "pronunciation": 86,
+        "verdict": "pass",
+        "feedback": "Synthetic demo audio; real multimodal critique requires Gemini API."
+      },
+      "attempts": 1
+    }
+  ]
+}

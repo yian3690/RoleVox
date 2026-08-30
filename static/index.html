@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="RoleVox — project-level character voice identity for game production">
+  <title>RoleVox — Game Character Voice System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;600&family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="grain"></div>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>ROLEVOX</span><small>VOICE SYSTEM</small></a>
+    <div class="system-status"><span id="statusDot" class="dot"></span><span id="systemText">CHECKING VERTEX AI</span></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="eyebrow">PROJECT-LEVEL VOICE IDENTITY · ZH / JA / EN</div>
+      <h1>One character.<br><em>One voice. Every line.</em></h1>
+      <p>ROLEVOX 把角色圖片、設定、場景與台詞組合成可鎖定的聲音身份，並聆聽每次演出、自動導演下一個 Take。</p>
+    </section>
+
+    <section id="projectCreator" class="creator-shell">
+      <div class="section-heading">
+        <div><span class="kicker">STEP 01 · CREATE PROJECT</span><h2>Start with the world, not the waveform.</h2></div>
+        <span class="index-mark">01 / 04</span>
+      </div>
+      <form id="projectForm" class="project-form">
+        <label>PROJECT NAME<input id="projectTitle" maxlength="80" placeholder="e.g. Ashes of Aster" required></label>
+        <label>SCENE<input id="projectScene" maxlength="80" placeholder="e.g. The Last Gate" required></label>
+        <label class="wide">WORLD & SCENE BACKGROUND
+          <textarea id="projectBackground" maxlength="4000" placeholder="世界觀、故事背景、場景張力、角色關係與此刻正在發生的事…" required></textarea>
+        </label>
+        <button type="submit" class="primary-action"><span>CREATE ROLEVOX PROJECT</span><b>→</b></button>
+        <p id="projectError" class="error" hidden></p>
+      </form>
+    </section>
+
+    <section id="studio" class="studio" hidden>
+      <header class="studio-header">
+        <div><span class="kicker">ACTIVE PROJECT</span><h2 id="studioTitle"></h2><p id="studioContext"></p></div>
+        <div class="project-badge"><span>PROJECT ID</span><strong id="projectId"></strong></div>
+      </header>
+
+      <div class="studio-layout">
+        <aside class="agent-rail">
+          <span class="rail-title">AGENT WORKFLOW</span>
+          <ol id="pipeline">
+            <li data-stage="Direction"><b>01</b><span>Director<small>World · scene · stakes</small></span></li>
+            <li data-stage="Translation"><b>02</b><span>Translation<small>ZH · JA · EN</small></span></li>
+            <li data-stage="Casting"><b>03</b><span>Visual Casting<small>Image + brief + scene</small></span></li>
+            <li data-stage="Dialogue planning"><b>04</b><span>Dialogue<small>Emotion · performance</small></span></li>
+            <li data-stage="Voice generation"><b>05</b><span>Voice Generation<small>Locked identity</small></span></li>
+            <li data-stage="Voice critique"><b>06</b><span>Voice Critic<small>Listen · revise · approve</small></span></li>
+            <li data-stage="Ready"><b>07</b><span>Audio QA<small>Manifest · WAV · ZIP</small></span></li>
+          </ol>
+          <div class="rail-note">NO VOICE CLONING<br>PREBUILT SYNTHETIC VOICES ONLY</div>
+        </aside>
+
+        <div class="studio-main">
+          <section class="panel character-builder">
+            <div class="section-heading compact">
+              <div><span class="kicker">STEP 02 · BUILD THE CAST</span><h2>Visual Casting</h2></div>
+              <span id="castCount" class="counter">0 CHARACTERS</span>
+            </div>
+            <p class="section-copy">角色圖片不是裝飾。Casting Agent 會把視覺線索、Character Brief、場景背景結合成可重用的 Character Voice Profile。</p>
+            <form id="characterForm" class="character-form">
+              <label>CHARACTER NAME<input id="characterName" maxlength="80" placeholder="原創角色名稱" required></label>
+              <label>CHARACTER IMAGE
+                <input id="characterImage" type="file" accept="image/png,image/jpeg,image/webp" required>
+              </label>
+              <label class="wide">CHARACTER BRIEF
+                <textarea id="characterBrief" maxlength="1000" placeholder="角色背景、性格、年齡感、說話習慣、與此場景的關係…" required></textarea>
+              </label>
+              <button id="castBtn" type="submit" class="secondary-action"><span>ANALYZE IMAGE & CAST VOICE</span><b>＋</b></button>
+              <p id="characterError" class="error wide" hidden></p>
+            </form>
+            <div id="characterGrid" class="character-grid">
+              <div class="empty-card">ADD A CHARACTER TO BEGIN VISUAL CASTING</div>
+            </div>
+          </section>
+
+          <section class="panel production-console">
+            <div class="section-heading compact">
+              <div><span class="kicker">STEP 03 · PRODUCTION SETTINGS</span><h2>Choose the finish line</h2></div>
+              <span id="readiness" class="readiness">WAITING FOR CAST</span>
+            </div>
+
+            <fieldset class="language-picker">
+              <legend>VOICE OUTPUT LANGUAGE <span>All dialogue is translated before performance</span></legend>
+              <label><input type="radio" name="targetLanguage" value="zh" checked><span><b>中文</b><small>Traditional Chinese</small></span><i>ZH</i></label>
+              <label><input type="radio" name="targetLanguage" value="ja"><span><b>日本語</b><small>Japanese</small></span><i>JA</i></label>
+              <label><input type="radio" name="targetLanguage" value="en"><span><b>English</b><small>International English</small></span><i>EN</i></label>
+            </fieldset>
+
+            <fieldset class="mode-picker">
+              <legend>PRODUCTION TARGET</legend>
+              <label><input type="radio" name="productionMode" value="draft"><span><b>Draft</b><small>Fast previews · target 72</small></span></label>
+              <label><input type="radio" name="productionMode" value="production" checked><span><b>Production</b><small>Game-ready dialogue · target 86</small></span></label>
+              <label><input type="radio" name="productionMode" value="cinematic"><span><b>Cinematic</b><small>Cutscenes · target 92</small></span></label>
+            </fieldset>
+
+            <div class="revision-control">
+              <div><span class="kicker">AGENT REVISION LIMIT</span><strong>Auto-improve takes</strong>
+                <p>ROLEVOX will critique and regenerate weak performances automatically.</p></div>
+              <select id="revisionLimit">
+                <option value="0">No revisions</option>
+                <option value="1">1 revision</option>
+                <option value="2" selected>2 revisions</option>
+                <option value="3">3 revisions</option>
+              </select>
+            </div>
+            <button id="produceBtn" class="primary-action full" disabled><span>START AGENTIC PRODUCTION</span><b>→</b></button>
+            <p id="productionError" class="error" hidden></p>
+          </section>
+
+          <section id="runPanel" class="panel run-panel" hidden>
+            <div class="section-heading compact">
+              <div><span class="kicker">LIVE AGENT RUN</span><h2 id="runStage">Queued</h2></div>
+              <strong id="runPercent">0%</strong>
+            </div>
+            <div class="progress"><i id="progressBar"></i></div>
+            <div id="eventLog" class="event-log"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="results" class="results" hidden>
+      <div class="section-heading">
+        <div><span class="kicker">STEP 04 · PRODUCTION COMPLETE</span><h2>Critic-approved game assets</h2></div>
+        <a id="downloadBtn" class="download" href="#"><span>DOWNLOAD GAME PACKAGE</span><b>↓</b></a>
+      </div>
+      <div id="summaryGrid" class="summary-grid"></div>
+      <div id="assetList" class="asset-list"></div>
+    </section>
+  </main>
+
+  <dialog id="characterDialog">
+    <button id="closeDialog" class="dialog-close" aria-label="Close">×</button>
+    <div id="dialogContent"></div>
+  </dialog>
+
+  <footer><span>ROLEVOX · GAME CHARACTER VOICE SYSTEM</span><span>GEMINI 3.5 + VERTEX AI + GOOGLE ADK</span></footer>
+  <script src="/app.js"></script>
+</body>
+</html>

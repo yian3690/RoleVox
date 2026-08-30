@@ -1,0 +1,183 @@
+{
+  "project": "Original Worlds",
+  "scene": "The Last Gate",
+  "background": "An original veteran guardian hears an unseen creature beyond the gate.",
+  "target_language": "en",
+  "target_language_name": "English",
+  "demo_mode": true,
+  "production_mode": "production",
+  "production_target": 86,
+  "agent_revision_limit": 2,
+  "backend": "demo",
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "character_references": [
+    {
+      "character": "Aren",
+      "description": "An original weathered guardian; restrained and authoritative.",
+      "has_image": true,
+      "source_filename": "aren.png"
+    }
+  ],
+  "direction": {
+    "genre": "cinematic adventure",
+    "setting": "The Last Gate",
+    "stakes": "The characters must make a consequential choice.",
+    "emotional_arc": "tension to resolve",
+    "language_policy": "preserve each line"
+  },
+  "casting": [
+    {
+      "character": "Aren",
+      "voice": "Charon",
+      "profile": "original informative fictional voice",
+      "emotion_baseline": "scene-aware",
+      "perceived_archetype": "Fictional game character",
+      "visual_tone": "Distinct · scene-aware · readable",
+      "suggested_register": "Mid register",
+      "delivery_style": "Measured · calm",
+      "voice_texture": "Clear",
+      "confidence": 87,
+      "visual_analysis": "Image silhouette, costume, posture and brief were combined for casting.",
+      "voice_identity": {
+        "voice": "Charon",
+        "qualities": "Informative",
+        "pitch": "Medium",
+        "texture": "Clear",
+        "speaking_style": "Reserved",
+        "accent": "Neutral",
+        "locked": true
+      },
+      "rationale": "Deterministic Demo Mode casting",
+      "voice_locked": true
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "Aren",
+      "text": "Something is breathing beyond the gate.",
+      "source_text": "Something is breathing beyond the gate.",
+      "target_language": "en",
+      "requested_emotion": "fearful but restrained",
+      "emotion": "fearful but restrained",
+      "intensity": 0.68,
+      "pace": "measured",
+      "pause_notes": "natural phrase breaks",
+      "voice": "Charon",
+      "file": "Aren_The_Last_Gate_001.wav",
+      "url": "/api/jobs/571a57f0e94c/files/Aren_The_Last_Gate_001.wav",
+      "qa": {
+        "score": 93,
+        "overall": 93,
+        "emotion_match": 91,
+        "character_consistency": 93,
+        "pronunciation": 97,
+        "scene_fit": 92,
+        "pace": 92,
+        "volume": 88,
+        "consistency": 93,
+        "verdict": "pass",
+        "feedback": "Performance now matches the locked character identity and scene.",
+        "revision": {
+          "emotion": {
+            "from": 52,
+            "to": 76
+          },
+          "speaking_rate": {
+            "from": 1.02,
+            "to": 0.87
+          },
+          "breathiness_delta": 18,
+          "pause_delta_seconds": 0.35,
+          "revised_pace": "slow"
+        }
+      },
+      "attempts": 2,
+      "selected_take": 2,
+      "approved": true,
+      "takes": [
+        {
+          "take": 1,
+          "file": "Aren_The_Last_Gate_001_take01.wav",
+          "url": "/api/jobs/571a57f0e94c/files/Aren_The_Last_Gate_001_take01.wav",
+          "approved": false,
+          "qa": {
+            "score": 78,
+            "overall": 78,
+            "emotion_match": 72,
+            "character_consistency": 91,
+            "pronunciation": 96,
+            "scene_fit": 67,
+            "pace": 76,
+            "volume": 88,
+            "consistency": 91,
+            "verdict": "retry",
+            "feedback": "Scene requires stronger fear and a lower speaking pace.",
+            "revision": {
+              "emotion": {
+                "from": 52,
+                "to": 76
+              },
+              "speaking_rate": {
+                "from": 1.02,
+                "to": 0.87
+              },
+              "breathiness_delta": 18,
+              "pause_delta_seconds": 0.35,
+              "revised_pace": "slow"
+            }
+          },
+          "revision": {
+            "emotion": {
+              "from": 52,
+              "to": 76
+            },
+            "speaking_rate": {
+              "from": 1.02,
+              "to": 0.87
+            },
+            "breathiness_delta": 18,
+            "pause_delta_seconds": 0.35,
+            "revised_pace": "slow"
+          }
+        },
+        {
+          "take": 2,
+          "file": "Aren_The_Last_Gate_001_take02.wav",
+          "url": "/api/jobs/571a57f0e94c/files/Aren_The_Last_Gate_001_take02.wav",
+          "approved": true,
+          "qa": {
+            "score": 93,
+            "overall": 93,
+            "emotion_match": 91,
+            "character_consistency": 93,
+            "pronunciation": 97,
+            "scene_fit": 92,
+            "pace": 92,
+            "volume": 88,
+            "consistency": 93,
+            "verdict": "pass",
+            "feedback": "Performance now matches the locked character identity and scene.",
+            "revision": {
+              "emotion": {
+                "from": 52,
+                "to": 76
+              },
+              "speaking_rate": {
+                "from": 1.02,
+                "to": 0.87
+              },
+              "breathiness_delta": 18,
+              "pause_delta_seconds": 0.35,
+              "revised_pace": "slow"
+            }
+          },
+          "revision": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "project": "Echoes of Aster",
+  "scene": "Temple Entrance",
+  "target_language": "ja",
+  "target_language_name": "Japanese",
+  "demo_mode": false,
+  "models": {
+    "analysis_and_critic": "gemini-3.5-flash",
+    "tts": "gemini-3.1-flash-tts-preview"
+  },
+  "direction": {
+    "genre": "Fantasy Adventure RPG",
+    "setting": "The imposing entrance of an ancient, mysterious temple, filled with an air of latent danger and quiet anticipation.",
+    "stakes": "The safety of the party as they enter uncharted, potentially trapped or hostile territory.",
+    "emotional_arc": "Shifts from gentle reassurance to quiet, protective determination.",
+    "performance_notes": "Ren (レン) should deliver this line with a calm, comforting tone to ease his companion's anxiety, transitioning into a firm, resolute resolve on the second sentence. Avoid sounding overly aggressive or boastful; the courage should feel intimate and protective.",
+    "pronunciation_risks": "Ensure the transition between '大丈夫' (daijoubu) and '僕が' (boku ga) has a natural, breathy pause. The 'g' in 'ga' should be soft, and 'saki ni iku' should flow smoothly without over-emphasizing the 'k' sounds."
+  },
+  "casting": [
+    {
+      "character": "レン",
+      "voice": "Zephyr",
+      "profile": "A soft, youthful male voice with a warm, airy quality. It carries a gentle, breathy resonance that excels at intimate, comforting dialogue, yet possesses a quiet, grounded strength in its lower register for moments of resolve.",
+      "rationale": "Zephyr's airy and gentle timbre is ideal for delivering the comforting '大丈夫' with the required breathy pause before transitioning into a protective, resolute tone for '僕が'. The soft, non-boastful warmth of this voice ensures the courage feels intimate and protective rather than aggressive, aligning perfectly with the emotional arc of the scene at the temple entrance."
+    }
+  ],
+  "lines": [
+    {
+      "id": 1,
+      "character": "レン",
+      "text": "大丈夫。僕が先に行く。",
+      "source_text": "大丈夫。僕が先に行く。",
+      "target_language": "ja",
+      "emotion": "Gentle reassurance transitioning to quiet determination",
+      "intensity": 0.4,
+      "pace": "measured",
+      "pause_notes": "A natural, breathy pause after '大丈夫' (daijoubu) before starting '僕が' (boku ga).",
+      "pronunciation_notes": "Ensure the 'g' in 'ga' is soft. 'saki ni iku' should flow smoothly without over-emphasizing the 'k' sounds.",
+      "voice": "Zephyr",
+      "file": "レン_Temple_Entrance_001.wav",
+      "url": "/api/jobs/6e3e6c8bca68/files/レン_Temple_Entrance_001.wav",
+      "qa": {
+        "score": 95,
+        "emotion": 94,
+        "pace": 95,
+        "volume": 90,
+        "consistency": 96,
+        "pronunciation": 98,
+        "verdict": "pass",
+        "feedback": "The performance beautifully captures the transition from gentle reassurance to quiet determination. The voice profile is spot-on, maintaining a soft, airy quality with a grounded resolve at the end. Excellent pacing and emotional delivery."
+      },
+      "attempts": 1
+    }
+  ]
+}
