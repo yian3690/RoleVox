@@ -16,9 +16,11 @@ class ProjectRequest(BaseModel):
     quality_threshold: int = Field(default=78, ge=50, le=100)
     max_retries: int = Field(default=1, ge=0, le=3)
     production_mode: Literal["draft", "production", "cinematic"] = "production"
-    workflow_mode: Literal["single", "dialogue"] = "dialogue"
+    workflow_mode: Literal["single", "dialogue", "voice_pack"] = "dialogue"
     line_emotions: dict[int, str] = Field(default_factory=dict)
     line_addressees: dict[int, str] = Field(default_factory=dict)
+    line_events: dict[int, str] = Field(default_factory=dict)
+    line_variants: dict[int, int] = Field(default_factory=dict)
     locked_casting: list[dict[str, Any]] = Field(default_factory=list)
     run_origin: Literal["studio", "api", "eventarc-inbox"] = "api"
 
@@ -72,6 +74,25 @@ class VoicePreviewCreate(BaseModel):
     language: Literal["zh", "en", "ja"] = "zh"
 
 
+class VoicePackEventSelection(BaseModel):
+    event: str = Field(min_length=1, max_length=48)
+    count: int = Field(ge=1, le=15)
+
+
+class VoicePackDraftCreate(BaseModel):
+    character_id: str = Field(min_length=1, max_length=40)
+    language: Literal["zh", "en", "ja"] = "zh"
+    events: list[VoicePackEventSelection] = Field(min_length=1, max_length=20)
+
+
+class VoicePackLine(BaseModel):
+    event: str = Field(min_length=1, max_length=48)
+    event_label: str = Field(min_length=1, max_length=80)
+    variant: int = Field(ge=1, le=15)
+    emotion: str = Field(min_length=1, max_length=80)
+    text: str = Field(min_length=1, max_length=500)
+
+
 class DialogueCreate(BaseModel):
     emotion: str = Field(min_length=1, max_length=80)
     text: str = Field(min_length=1, max_length=4_000)
@@ -116,12 +137,14 @@ class ProjectRecord(BaseModel):
 class ProductionCreate(BaseModel):
     target_language: Literal["zh", "en", "ja"]
     production_mode: Literal["draft", "production", "cinematic"] = "production"
-    workflow_mode: Literal["single", "dialogue"] = "dialogue"
+    workflow_mode: Literal["single", "dialogue", "voice_pack"] = "dialogue"
     revision_limit: int = Field(default=2, ge=0, le=3)
     character_id: str | None = Field(default=None, max_length=40)
     single_character_id: str | None = Field(default=None, max_length=40)
     single_emotion: str | None = Field(default=None, max_length=80)
     single_text: str | None = Field(default=None, max_length=4_000)
+    pack_character_id: str | None = Field(default=None, max_length=40)
+    pack_lines: list[VoicePackLine] = Field(default_factory=list, max_length=24)
 
 
 class InboxManifest(BaseModel):

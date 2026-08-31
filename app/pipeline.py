@@ -64,6 +64,85 @@ USE_VERTEX_AI = (
 LANGUAGES = {"zh": "Traditional Chinese (Taiwan)", "en": "English", "ja": "Japanese"}
 TTS_RECOVERY_VOICES = ("Kore", "Iapetus", "Achird", "Schedar", "Sulafat", "Despina", "Puck")
 
+VOICE_EVENT_CATALOG = [
+    {"key": "first_encounter", "label": "First Encounter", "group": "Social", "min": 1, "max": 2},
+    {"key": "greeting", "label": "Greeting", "group": "Social", "min": 3, "max": 5},
+    {"key": "farewell", "label": "Farewell", "group": "Social", "min": 2, "max": 4},
+    {"key": "idle", "label": "Idle", "group": "Social", "min": 4, "max": 8},
+    {"key": "long_idle", "label": "Long Idle", "group": "Social", "min": 2, "max": 4},
+    {"key": "character_select", "label": "Character Select", "group": "Party", "min": 2, "max": 3},
+    {"key": "join_party", "label": "Join Party", "group": "Party", "min": 1, "max": 3},
+    {"key": "leave_party", "label": "Leave Party", "group": "Party", "min": 1, "max": 2},
+    {"key": "move", "label": "Move", "group": "Exploration", "min": 2, "max": 5},
+    {"key": "arrival", "label": "Arrival", "group": "Exploration", "min": 2, "max": 3},
+    {"key": "exploration", "label": "Exploration", "group": "Exploration", "min": 3, "max": 6},
+    {"key": "item_found", "label": "Item Found", "group": "Exploration", "min": 2, "max": 4},
+    {"key": "treasure", "label": "Treasure", "group": "Exploration", "min": 2, "max": 4},
+    {"key": "location_reaction", "label": "Location Reaction", "group": "World", "min": 1, "max": 3},
+    {"key": "weather", "label": "Weather", "group": "World", "min": 1, "max": 3},
+    {"key": "time_reaction", "label": "Time Reaction", "group": "World", "min": 1, "max": 3},
+    {"key": "enemy_spotted", "label": "Enemy Spotted", "group": "Combat", "min": 3, "max": 6},
+    {"key": "boss_spotted", "label": "Elite / Boss Spotted", "group": "Combat", "min": 2, "max": 4},
+    {"key": "combat_start", "label": "Combat Start", "group": "Combat", "min": 3, "max": 5},
+    {"key": "attack_light", "label": "Basic Attack", "group": "Combat", "min": 5, "max": 15},
+    {"key": "attack_heavy", "label": "Heavy Attack", "group": "Combat", "min": 3, "max": 6},
+    {"key": "skill", "label": "Skill", "group": "Combat", "min": 2, "max": 5},
+    {"key": "ultimate", "label": "Ultimate", "group": "Combat", "min": 1, "max": 3},
+    {"key": "dodge", "label": "Dodge", "group": "Combat", "min": 3, "max": 6},
+    {"key": "block", "label": "Block", "group": "Combat", "min": 2, "max": 5},
+    {"key": "hurt_light", "label": "Light Damage", "group": "Condition", "min": 5, "max": 10},
+    {"key": "hurt_heavy", "label": "Heavy Damage", "group": "Condition", "min": 3, "max": 6},
+    {"key": "low_hp", "label": "Low HP", "group": "Condition", "min": 2, "max": 4},
+    {"key": "ally_low_hp", "label": "Ally Low HP", "group": "Condition", "min": 2, "max": 4},
+    {"key": "enemy_defeated", "label": "Enemy Defeated", "group": "Outcome", "min": 3, "max": 8},
+    {"key": "boss_defeated", "label": "Boss Defeated", "group": "Outcome", "min": 1, "max": 3},
+    {"key": "downed", "label": "Downed", "group": "Condition", "min": 2, "max": 4},
+    {"key": "death", "label": "Death", "group": "Condition", "min": 1, "max": 3},
+    {"key": "revive", "label": "Revive", "group": "Condition", "min": 2, "max": 4},
+    {"key": "victory", "label": "Victory", "group": "Outcome", "min": 3, "max": 6},
+    {"key": "retreat", "label": "Retreat", "group": "Outcome", "min": 2, "max": 4},
+    {"key": "quest_accept", "label": "Quest Accept", "group": "Progression", "min": 2, "max": 3},
+    {"key": "quest_complete", "label": "Quest Complete", "group": "Progression", "min": 2, "max": 4},
+    {"key": "quest_fail", "label": "Quest Fail", "group": "Progression", "min": 1, "max": 3},
+    {"key": "level_up", "label": "Level Up", "group": "Progression", "min": 2, "max": 4},
+    {"key": "equipment", "label": "Equipment", "group": "Progression", "min": 2, "max": 4},
+    {"key": "gift", "label": "Gift", "group": "Relationship", "min": 2, "max": 5},
+    {"key": "relationship", "label": "Relationship", "group": "Relationship", "min": 1, "max": 3},
+    {"key": "party_banter", "label": "Party Banter", "group": "Relationship", "min": 2, "max": 4},
+    {"key": "story_reaction", "label": "Story Reaction", "group": "Story", "min": 1, "max": 4},
+]
+VOICE_EVENT_MAP = {item["key"]: item for item in VOICE_EVENT_CATALOG}
+
+VOICE_EVENT_EMOTION_DEFAULTS = {
+    "Social": ["Warm", "guarded", "conversational"],
+    "Party": ["Supportive", "confident", "familiar"],
+    "Exploration": ["Alert", "curious", "restrained"],
+    "World": ["Reflective", "observant", "atmospheric"],
+    "Combat": ["Fierce", "focused", "urgent"],
+    "Condition": ["Strained", "vulnerable", "determined"],
+    "Outcome": ["Resolute", "exhausted", "relieved"],
+    "Progression": ["Satisfied", "grounded", "quietly proud"],
+    "Relationship": ["Gentle", "hesitant", "sincere"],
+    "Story": ["Shaken", "restrained", "emotionally raw"],
+}
+
+
+def _voice_pack_emotion(value: str, event_key: str) -> str:
+    """Return three concise, UI-ready acting descriptors joined by middle dots."""
+    event = VOICE_EVENT_MAP.get(event_key, {})
+    fallbacks = VOICE_EVENT_EMOTION_DEFAULTS.get(event.get("group", ""),
+                                                  ["Focused", "restrained", "authentic"])
+    cleaned = re.sub(r"\s+(?:and|with)\s+", " · ", str(value or ""), flags=re.I)
+    candidates = [part.strip(" .") for part in re.split(r"[·,;/|]+", cleaned) if part.strip(" .")]
+    combined: list[str] = []
+    for item in [*candidates, *fallbacks]:
+        normalized = item[:28]
+        if normalized and normalized.casefold() not in {part.casefold() for part in combined}:
+            combined.append(normalized)
+        if len(combined) == 3:
+            break
+    return " · ".join(combined)
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -372,15 +451,119 @@ Scene direction: {json.dumps(direction, ensure_ascii=False)}"""
         return self._casting(client, direction, [name], {name: description}, {name: image},
                              {name: voice_presentation})[0]
 
-    def preview_voice(self, character: str, candidate: dict[str, Any], language: str) -> bytes:
-        samples = {
-            "zh": "跟緊我。我會帶大家安全穿過這場風暴。",
-            "ja": "私についてきて。この嵐を越えてみせる。",
-            "en": "Stay close. I will lead everyone safely through this storm.",
-        }
+    def generate_preview_line(self, project: str, scene: str, background: str,
+                              character: str, brief: str, language: str) -> dict[str, str]:
+        """Create one reusable, context-specific line for fair voice auditions."""
+        if DEMO_MODE:
+            samples = {
+                "zh": f"我是{character}。在{scene}，我不會讓任何人獨自面對危險。",
+                "ja": f"{character}だ。{scene}では、誰も一人で危険に立ち向かわせない。",
+                "en": f"I am {character}. Here in {scene}, no one faces the danger alone.",
+            }
+            return {"text": samples[language], "emotion": "character-authentic, grounded, revealing"}
+        client = self._client()
+        result = self._json_call(client, f"""You write a single original game-character voice audition line.
+Return one JSON object with exactly: text, emotion. Write the spoken text in {LANGUAGES[language]}.
+The line must be 8-22 spoken words (or a natural equivalent), safe, self-contained, and reveal this
+specific character's personality. It must clearly draw from the character brief AND current world/scene;
+do not copy existing franchise dialogue, do not narrate, and do not include stage directions.
+Project: {project}
+Scene: {scene}
+World and scene background: {background}
+Character: {character}
+Character brief: {brief}""")
+        text = str(result.get("text", "")).strip() if isinstance(result, dict) else ""
+        emotion = str(result.get("emotion", "character-authentic")).strip() if isinstance(result, dict) else ""
+        if not text:
+            raise RuntimeError("Preview Line Agent returned no spoken text.")
+        return {"text": text, "emotion": emotion or "character-authentic"}
+
+    def generate_voice_pack_draft(self, project: str, scene: str, background: str,
+                                  character: str, brief: str, language: str,
+                                  selections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        total = sum(int(item.get("count", 0)) for item in selections)
+        if total < 1 or total > 24:
+            raise ValueError("Choose between 1 and 24 total voice-pack lines.")
+        normalized = []
+        for selection in selections:
+            key = str(selection.get("event", ""))
+            event = VOICE_EVENT_MAP.get(key)
+            count = int(selection.get("count", 0))
+            if not event or count < 1 or count > int(event["max"]):
+                raise ValueError(f"Invalid voice event or variant count: {key}")
+            normalized.append({"event": key, "label": event["label"], "count": count})
+
+        if DEMO_MODE:
+            templates = {
+                "zh": {"greeting": "又見面了。今天也別離我太遠。", "farewell": "先走吧，我會確認後方安全。",
+                       "idle": "四周太安靜了……保持警覺。", "combat_start": "站穩，戰鬥要開始了。",
+                       "victory": "結束了。先確認有沒有人受傷。", "enemy_spotted": "前方有動靜，準備迎敵。"},
+                "ja": {"greeting": "また会ったな。今日も私から離れるな。", "farewell": "先に行け。後方は私が確認する。",
+                       "idle": "静かすぎる……警戒を怠るな。", "combat_start": "構えろ、戦いが始まる。",
+                       "victory": "終わった。まず負傷者を確認する。", "enemy_spotted": "前方に気配だ。迎撃準備。"},
+                "en": {"greeting": "Good to see you again. Stay close today.", "farewell": "Go ahead. I will secure the rear.",
+                       "idle": "It is too quiet here. Stay alert.", "combat_start": "Hold your ground. The fight starts now.",
+                       "victory": "It is over. Check everyone for injuries.", "enemy_spotted": "Movement ahead. Prepare to engage."},
+            }
+            draft = []
+            for selected in normalized:
+                base = templates[language].get(selected["event"])
+                for variant in range(1, selected["count"] + 1):
+                    text = base or {
+                        "zh": f"{character}正在回應「{selected['label']}」的時刻。",
+                        "ja": f"{character}が「{selected['label']}」の場面に応える。",
+                        "en": f"{character} responds to this {selected['label'].lower()} moment.",
+                    }[language]
+                    if variant > 1:
+                        text = f"{text.rstrip('。.!')} {variant}{'。' if language != 'en' else '.'}"
+                    draft.append({"event": selected["event"], "event_label": selected["label"],
+                                  "variant": variant,
+                                  "emotion": _voice_pack_emotion("", selected["event"]),
+                                  "text": text})
+            return draft
+
+        client = self._client()
+        result = self._json_call(client, f"""You are RoleVox Voice Pack Writer for an original game character.
+Create exactly {total} short, production-ready spoken lines in {LANGUAGES[language]} using the requested
+event counts below. Return only a JSON array. Every object must contain exactly:
+event, event_label, variant, emotion, text.
+Keep event keys and labels exactly as supplied; variant numbering starts at 1 within each event.
+The emotion must contain exactly THREE concise acting descriptors separated by the middle-dot character,
+for example: Fearful · restrained · urgent. Make all three descriptors specific to the event and character.
+Every line must be distinct, natural to speak, concise, and strongly consistent with the character brief,
+world, current scene, and event. Combat exertions may be very short. Do not include narration, quotes,
+speaker names, stage directions, copyrighted dialogue, or explanations.
+Project: {project}
+Scene: {scene}
+World and scene background: {background}
+Character: {character}
+Character brief: {brief}
+Requested events: {json.dumps(normalized, ensure_ascii=False)}""")
+        if not isinstance(result, list):
+            raise RuntimeError("Voice Pack Writer returned an invalid draft.")
+        draft = []
+        for selected in normalized:
+            matching = [item for item in result if isinstance(item, dict)
+                        and item.get("event") == selected["event"]]
+            for variant in range(1, selected["count"] + 1):
+                item = next((row for row in matching if int(row.get("variant", 0)) == variant), None)
+                if not item or not str(item.get("text", "")).strip():
+                    raise RuntimeError(
+                        f"Voice Pack Writer omitted {selected['event']} variant {variant}."
+                    )
+                draft.append({"event": selected["event"], "event_label": selected["label"],
+                              "variant": variant,
+                              "emotion": _voice_pack_emotion(
+                                  str(item.get("emotion", "")), selected["event"]
+                              ),
+                              "text": str(item["text"]).strip()[:500]})
+        return draft
+
+    def preview_voice(self, character: str, candidate: dict[str, Any], language: str,
+                      sample: dict[str, str]) -> bytes:
         client = None if DEMO_MODE else self._client()
-        line = {"id": "audition", "text": samples[language], "target_language": language,
-                "emotion": "confident and character-authentic", "intensity": .58,
+        line = {"id": "audition", "text": sample["text"], "target_language": language,
+                "emotion": sample.get("emotion", "character-authentic"), "intensity": .58,
                 "pace": "measured", "pause_notes": "natural phrase breaks",
                 "pronunciation_notes": "clear audition delivery"}
         cast = {"character": character, "voice": candidate["voice"],
@@ -661,6 +844,10 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                 requested_addressee = request.line_addressees.get(localized["id"])
                 if requested_addressee:
                     localized["requested_addressee"] = requested_addressee
+                requested_event = request.line_events.get(localized["id"])
+                if requested_event:
+                    localized["voice_event"] = requested_event
+                    localized["voice_variant"] = request.line_variants.get(localized["id"], 1)
             self._update(job, "Casting", 28, "Translation Agent",
                          "Localization complete; source and translated text retained", "passed")
 
@@ -689,11 +876,25 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                 feedback = ""
                 best: tuple[bytes, dict[str, Any], int] | None = None
                 takes: list[dict[str, Any]] = []
+                generation_warning: str | None = None
                 for attempt in range(request.max_retries + 1):
                     pct = 45 + int(45 * ((index + attempt / (request.max_retries + 1)) / len(planned)))
                     self._update(job, "Voice generation", pct, "Voice Generation",
                                  f"Line {line['id']}: {line['character']} / attempt {attempt + 1}")
-                    wav_bytes = self._tts(client, line, cast, direction, attempt, feedback)
+                    try:
+                        wav_bytes = self._tts(client, line, cast, direction, attempt, feedback)
+                    except Exception as tts_error:
+                        if best is None:
+                            raise
+                        generation_warning = (
+                            f"Revision take {attempt + 1:02d} could not be generated after recovery; "
+                            f"preserved best successful take {best[2]:02d}. {tts_error}"
+                        )
+                        self._update(
+                            job, "Voice critique", pct + 1, "Voice Recovery Agent",
+                            f"Line {line['id']}: {generation_warning} Voice Lock preserved.", "retry",
+                        )
+                        break
                     recovery = cast.pop("_last_tts_recovery", None)
                     if recovery:
                         self._update(
@@ -703,10 +904,18 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                         )
                     qa = self._critic(client, wav_bytes, line, cast, attempt)
                     score = int(qa.get("score", 0))
-                    take_filename = (
-                        f"{_slug(line['character'], 'character')}_{_slug(request.scene, 'scene')}_"
-                        f"{line['id']:03d}_take{attempt + 1:02d}.wav"
-                    )
+                    if request.workflow_mode == "voice_pack":
+                        asset_stem = (
+                            f"{_slug(line['character'], 'character').lower()}_"
+                            f"{_slug(line.get('voice_event', 'event'), 'event').lower()}_"
+                            f"{int(line.get('voice_variant', 1)):02d}"
+                        )
+                    else:
+                        asset_stem = (
+                            f"{_slug(line['character'], 'character')}_"
+                            f"{_slug(request.scene, 'scene')}_{line['id']:03d}"
+                        )
+                    take_filename = f"{asset_stem}_take{attempt + 1:02d}.wav"
                     (job_dir / take_filename).write_bytes(wav_bytes)
                     approved = score >= request.quality_threshold
                     takes.append({"take": attempt + 1, "file": take_filename,
@@ -726,12 +935,23 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                                  f"Take {attempt + 1:02d} scored {score}; auto-directing next take: "
                                  f"{qa.get('feedback', feedback)}", "retry")
                 assert best is not None
-                filename = f"{_slug(line['character'], 'character')}_{_slug(request.scene, 'scene')}_{line['id']:03d}.wav"
+                filename = f"{asset_stem}.wav"
                 (job_dir / filename).write_bytes(best[0])
+                approved = int(best[1].get("score", 0)) >= request.quality_threshold
+                needs_review = not approved or generation_warning is not None
+                if generation_warning:
+                    self._update(
+                        job, "Voice critique", 90, "Voice Critic Agent",
+                        f"Line {line['id']} packaged as BEST AVAILABLE · NEEDS REVIEW; "
+                        f"selected Take {best[2]:02d} without changing locked voice {cast['voice']}",
+                        "info",
+                    )
                 results.append({**line, "voice": cast["voice"], "file": filename,
                                 "url": f"/api/jobs/{job.id}/files/{filename}",
                                 "qa": best[1], "attempts": len(takes), "selected_take": best[2],
-                                "approved": int(best[1].get("score", 0)) >= request.quality_threshold,
+                                "approved": approved, "needs_review": needs_review,
+                                "best_available": generation_warning is not None,
+                                "generation_warning": generation_warning,
                                 "takes": takes})
 
             completed_at = _utcnow()
@@ -742,6 +962,8 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                 line_receipts.append({
                     "line_id": result["id"], "character": result["character"],
                     "voice": result["voice"], "approved": result["approved"],
+                    "needs_review": result["needs_review"],
+                    "best_available": result["best_available"],
                     "selected_take": result["selected_take"],
                     "critic_score": int(result["qa"].get("score", 0)),
                     "attempts": result["attempts"], "output_file": result["file"],
@@ -773,6 +995,7 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                     ),
                 },
                 "models": {"analysis_and_critic": TEXT_MODEL, "tts": TTS_MODEL},
+                "needs_review_count": sum(1 for result in results if result["needs_review"]),
                 "lines": line_receipts,
             }
             receipt_path = job_dir / "run_receipt.json"
@@ -785,6 +1008,7 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                         "workflow_mode": request.workflow_mode,
                         "production_target": request.quality_threshold,
                         "agent_revision_limit": request.max_retries,
+                        "needs_review_count": sum(1 for result in results if result["needs_review"]),
                         "backend": self.backend_name(),
                         "orchestrator": orchestrator,
                         "run_origin": request.run_origin,
@@ -816,7 +1040,13 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                 job.result = {**manifest, "package_url": f"/api/jobs/{job.id}/package",
                               "package_name": zip_name, "cloud_url": cloud_url,
                               "run_receipt": receipt}
-                job.events.append(JobEvent(agent="Audio QA", message="Manifest and game asset package ready", status="passed"))
+                review_count = sum(1 for result in results if result["needs_review"])
+                job.events.append(JobEvent(
+                    agent="Audio QA",
+                    message=(f"Manifest and game asset package ready · {review_count} line(s) need human review"
+                             if review_count else "Manifest and game asset package ready"),
+                    status="info" if review_count else "passed",
+                ))
             state_store.save_job(job)
         except Exception as exc:
             with self._lock:

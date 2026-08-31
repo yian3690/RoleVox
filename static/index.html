@@ -119,6 +119,7 @@
               <legend>GENERATION TYPE</legend>
               <label><input type="radio" name="generationMode" value="single"><span><b>Single Character</b><small>One-off line · does not change the project script</small></span><i>01</i></label>
               <label><input type="radio" name="generationMode" value="dialogue" checked><span><b>Dialogue</b><small>Context-aware multi-character script</small></span><i>02</i></label>
+              <label><input type="radio" name="generationMode" value="voice_pack"><span><b>Character Voice Pack</b><small>AI-written event lines · review before production</small></span><i>03</i></label>
             </fieldset>
 
             <fieldset class="language-picker">
@@ -151,6 +152,17 @@
                 <p id="projectDialogueError" class="error" hidden></p>
               </form>
               <div id="projectDialogueList" class="project-dialogue-list"><div class="empty-dialogue">ADD A CHARACTER, THEN WRITE THE FIRST LINE</div></div>
+            </section>
+
+            <section id="voicePackPanel" class="voice-pack-panel" hidden>
+              <div class="voice-pack-heading"><div><span class="kicker">CHARACTER VOICE PACK</span><h3>Generate event dialogue drafts</h3>
+                <p>Select a locked character and the game events you need. AI writes context-aware lines first; edit or remove them before any audio is generated.</p></div><strong id="voicePackDraftCount">0 / 24 LINES</strong></div>
+              <label class="voice-pack-character">CHARACTER<select id="voicePackCharacter"></select></label>
+              <div class="voice-pack-toolbar"><span>SELECT VOICE EVENTS</span><small>Variant counts use the recommended range. Maximum 24 lines per run.</small></div>
+              <div id="voiceEventCatalog" class="voice-event-catalog"><div class="empty-dialogue">LOADING VOICE EVENTS…</div></div>
+              <button id="generateVoicePackDraft" type="button" class="secondary-action" disabled><span>GENERATE TEXT DRAFT</span><b>✦</b></button>
+              <p id="voicePackError" class="error" hidden></p>
+              <div id="voicePackDraft" class="voice-pack-draft"><div class="empty-dialogue">SELECT EVENTS TO CREATE AN EDITABLE DRAFT</div></div>
             </section>
 
             <fieldset class="mode-picker">

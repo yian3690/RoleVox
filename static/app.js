@@ -7,6 +7,8 @@ let contextProjectId = null;
 let projectActionMode = 'rename';
 let editingDialogue = null;
 let pendingDeleteCharacterId = null;
+let voiceEvents = [];
+let voicePackDraft = [];
 const imagePreviews = new Map();
 
 async function api(url, options = {}) {
@@ -26,7 +28,13 @@ async function apiBlob(url, options = {}) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.detail || `Request failed (${response.status})`);
   }
-  return response.blob();
+  return {blob: await response.blob(), headers: response.headers};
+}
+
+function decodeBase64Utf8(value) {
+  if (!value) return '';
+  const bytes = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 function escapeHtml(value) {
@@ -207,6 +215,7 @@ async function activateProject(projectId) {
     project = await api(`/api/projects/${projectId}`);
     activeCharacterId = null;
     editingDialogue = null;
+    voicePackDraft = [];
     $('#characterDialog').close();
     $('#projectCreator').hidden = true;
     $('#studio').hidden = false;
@@ -221,6 +230,7 @@ function showNewProject() {
   project = null;
   activeCharacterId = null;
   editingDialogue = null;
+  voicePackDraft = [];
   if ($('#characterDialog').open) $('#characterDialog').close();
   $('#studio').hidden = true;
   $('#results').hidden = true;
@@ -316,6 +326,12 @@ function renderProject() {
     `<option value="${character.id}">${escapeHtml(character.name)} · ${character.voice_locked ? '🔒 locked' : 'voice unlocked'}</option>`
   ).join('') : '<option value="">ADD A CHARACTER FIRST</option>';
   if ([...target.options].some((option) => option.value === previousTarget)) target.value = previousTarget;
+  const packTarget = $('#voicePackCharacter');
+  const previousPackTarget = packTarget.value;
+  packTarget.innerHTML = target.innerHTML;
+  if ([...packTarget.options].some((option) => option.value === previousPackTarget)) {
+    packTarget.value = previousPackTarget;
+  }
   const grid = $('#characterGrid');
   if (!project.characters.length) {
     grid.innerHTML = '<div class="empty-card">ADD A CHARACTER TO BEGIN VISUAL CASTING</div>';
@@ -533,6 +549,7 @@ function openCharacter(characterId) {
           <div class="candidate-actions"><button type="button" class="audition-button" data-voice="${escapeHtml(candidate.voice)}">▶ GENERATE PREVIEW</button>
           <button type="button" class="select-voice" data-voice="${escapeHtml(candidate.voice)}" ${character.voice_locked ? 'disabled' : ''}>${selectedVoice === candidate.voice ? '✓ SELECTED' : 'SELECT VOICE'}</button></div>
           <audio class="audition-audio" data-voice="${escapeHtml(candidate.voice)}" controls hidden></audio>
+          <p class="audition-preview-line" data-voice="${escapeHtml(candidate.voice)}" hidden></p>
         </article>`).join('')}</div>
         <span class="block-label selected-identity-label">${selectedVoice ? 'SELECTED VOICE IDENTITY' : 'SELECT A VOICE TO CREATE THE IDENTITY'}</span>
         <dl class="detail-list identity">
@@ -637,15 +654,18 @@ function openCharacter(characterId) {
       button.disabled = true;
       button.textContent = 'GENERATING…';
       try {
-        const blob = await apiBlob(`/api/projects/${project.id}/characters/${character.id}/voice-preview`, {
+        const previewResponse = await apiBlob(`/api/projects/${project.id}/characters/${character.id}/voice-preview`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({voice: button.dataset.voice, language: $('#previewLanguage').value})
         });
         const audio = document.querySelector(`.audition-audio[data-voice="${CSS.escape(button.dataset.voice)}"]`);
         if (audio.dataset.objectUrl) URL.revokeObjectURL(audio.dataset.objectUrl);
-        audio.dataset.objectUrl = URL.createObjectURL(blob);
+        audio.dataset.objectUrl = URL.createObjectURL(previewResponse.blob);
         audio.src = audio.dataset.objectUrl;
         audio.hidden = false;
+        const previewLine = document.querySelector(`.audition-preview-line[data-voice="${CSS.escape(button.dataset.voice)}"]`);
+        previewLine.textContent = `“${decodeBase64Utf8(previewResponse.headers.get('X-RoleVox-Preview-Text-B64'))}”`;
+        previewLine.hidden = false;
         await audio.play().catch(() => {});
         button.textContent = '↻ REGENERATE';
       } catch (err) {
@@ -690,6 +710,131 @@ $('#deleteCharacterForm').addEventListener('submit', async (event) => {
   } finally { button.disabled = false; }
 });
 
+async function loadVoiceEvents() {
+  try {
+    voiceEvents = await api('/api/voice-events');
+    renderVoiceEventCatalog();
+  } catch (err) {
+    $('#voiceEventCatalog').innerHTML = `<div class="empty-dialogue">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function selectedVoiceEvents() {
+  return [...document.querySelectorAll('.voice-event-option input[type="checkbox"]:checked')].map((checkbox) => {
+    const option = checkbox.closest('.voice-event-option');
+    return {event: checkbox.value, count: Number(option.querySelector('select').value)};
+  });
+}
+
+function updateVoicePackSelection() {
+  const total = selectedVoiceEvents().reduce((sum, item) => sum + item.count, 0);
+  $('#generateVoicePackDraft').disabled = !project || !$('#voicePackCharacter').value || total < 1 || total > 24;
+  $('#voicePackDraftCount').textContent = `${voicePackDraft.length || total} / 24 LINES`;
+  const error = $('#voicePackError');
+  if (total > 24) {
+    error.textContent = `Selected variants total ${total}. Reduce the selection to 24 lines or fewer.`;
+    error.hidden = false;
+  } else if (error.dataset.selectionError === 'true') {
+    error.hidden = true;
+    error.dataset.selectionError = 'false';
+  }
+}
+
+function renderVoiceEventCatalog() {
+  if (!voiceEvents.length) return;
+  let group = '';
+  $('#voiceEventCatalog').innerHTML = voiceEvents.map((event) => {
+    const heading = event.group !== group ? `<div class="voice-event-group">${escapeHtml(event.group)}</div>` : '';
+    group = event.group;
+    const options = Array.from({length: event.max - event.min + 1}, (_, index) => event.min + index)
+      .map((count) => `<option value="${count}">${count} line${count === 1 ? '' : 's'}</option>`).join('');
+    return `${heading}<label class="voice-event-option"><input type="checkbox" value="${escapeHtml(event.key)}">
+      <span><b>${escapeHtml(event.label)}</b><small>${event.min}–${event.max} recommended</small></span>
+      <select aria-label="${escapeHtml(event.label)} variants">${options}</select></label>`;
+  }).join('');
+  document.querySelectorAll('.voice-event-option').forEach((option) => {
+    const checkbox = option.querySelector('input');
+    const select = option.querySelector('select');
+    checkbox.addEventListener('change', () => {
+      voicePackDraft = [];
+      renderVoicePackDraft();
+      updateVoicePackSelection();
+    });
+    select.addEventListener('change', () => {
+      checkbox.checked = true;
+      voicePackDraft = [];
+      renderVoicePackDraft();
+      updateVoicePackSelection();
+    });
+    select.addEventListener('click', (event) => event.stopPropagation());
+  });
+  updateVoicePackSelection();
+}
+
+function renderVoicePackDraft() {
+  $('#voicePackDraftCount').textContent = `${voicePackDraft.length} / 24 LINES`;
+  if (!voicePackDraft.length) {
+    $('#voicePackDraft').innerHTML = '<div class="empty-dialogue">SELECT EVENTS TO CREATE AN EDITABLE DRAFT</div>';
+    updateReadiness();
+    return;
+  }
+  $('#voicePackDraft').innerHTML = `<div class="voice-pack-approved"><b>TEXT REVIEW</b> · Edit emotion or dialogue, remove unwanted variants, then start production below.</div>${voicePackDraft.map((line, index) => `
+    <article class="voice-pack-line" data-index="${index}">
+      <div><span>${escapeHtml(line.event)}</span><strong>${escapeHtml(line.event_label)} ${String(line.variant).padStart(2, '0')}</strong></div>
+      <label>VOICE EMOTION<input class="pack-emotion" maxlength="80" value="${escapeHtml(line.emotion)}"></label>
+      <label>DIALOGUE TEXT<textarea class="pack-text" maxlength="500">${escapeHtml(line.text)}</textarea></label>
+      <button type="button" class="delete-pack-line" title="Remove line">×</button>
+    </article>`).join('')}`;
+  $('#voicePackDraft').querySelectorAll('.voice-pack-line').forEach((row) => {
+    const index = Number(row.dataset.index);
+    row.querySelector('.pack-emotion').addEventListener('input', (event) => {
+      voicePackDraft[index].emotion = event.target.value;
+      updateReadiness();
+    });
+    row.querySelector('.pack-text').addEventListener('input', (event) => {
+      voicePackDraft[index].text = event.target.value;
+      updateReadiness();
+    });
+    row.querySelector('.delete-pack-line').addEventListener('click', () => {
+      voicePackDraft.splice(index, 1);
+      renderVoicePackDraft();
+    });
+  });
+  updateReadiness();
+}
+
+$('#generateVoicePackDraft').addEventListener('click', async () => {
+  const button = $('#generateVoicePackDraft');
+  const error = $('#voicePackError');
+  error.hidden = true;
+  button.disabled = true;
+  button.querySelector('span').textContent = 'AI WRITING DRAFT…';
+  try {
+    const result = await api(`/api/projects/${project.id}/voice-pack/draft`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        character_id: $('#voicePackCharacter').value,
+        language: document.querySelector('input[name="targetLanguage"]:checked').value,
+        events: selectedVoiceEvents()
+      })
+    });
+    voicePackDraft = result.lines;
+    renderVoicePackDraft();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  } finally {
+    button.querySelector('span').textContent = 'REGENERATE TEXT DRAFT';
+    updateVoicePackSelection();
+  }
+});
+
+$('#voicePackCharacter').addEventListener('change', () => {
+  voicePackDraft = [];
+  renderVoicePackDraft();
+  updateVoicePackSelection();
+});
+
 function updateReadiness() {
   const allCharacters = project?.characters || [];
   const mode = document.querySelector('input[name="generationMode"]:checked').value;
@@ -702,6 +847,15 @@ function updateReadiness() {
     message = !character ? 'SELECT CHARACTER'
       : !character.voice_locked ? `LOCK ${character.name.toUpperCase()} VOICE`
       : !hasDirection ? 'ENTER EMOTION + DIALOGUE' : 'READY · SINGLE CHARACTER · VOICE LOCKED';
+  } else if (mode === 'voice_pack') {
+    const character = allCharacters.find((item) => item.id === $('#voicePackCharacter').value);
+    const validLines = voicePackDraft.filter((line) => line.text.trim() && line.emotion.trim());
+    ready = Boolean(character?.voice_locked && validLines.length && validLines.length === voicePackDraft.length);
+    message = !character ? 'SELECT CHARACTER'
+      : !character.voice_locked ? `LOCK ${character.name.toUpperCase()} VOICE`
+      : !voicePackDraft.length ? 'GENERATE AND REVIEW TEXT DRAFT'
+      : validLines.length !== voicePackDraft.length ? 'COMPLETE EVERY DRAFT LINE'
+      : `READY · VOICE PACK · ${voicePackDraft.length} LINES`;
   } else {
     const speakers = allCharacters.filter((item) => item.dialogues.length > 0);
     const unlocked = speakers.filter((item) => !item.voice_locked).length;
@@ -719,12 +873,19 @@ function updateReadiness() {
 $('#productionCharacter').addEventListener('change', updateReadiness);
 ['singleVoiceEmotion', 'singleDialogueText'].forEach((id) => $(`#${id}`).addEventListener('input', updateReadiness));
 document.querySelectorAll('input[name="generationMode"]').forEach((input) => input.addEventListener('change', () => {
-  const single = input.value === 'single' && input.checked;
   if (!input.checked) return;
-  $('#singleGenerationPanel').hidden = !single;
-  $('#dialogueGenerationPanel').hidden = single;
+  $('#singleGenerationPanel').hidden = input.value !== 'single';
+  $('#dialogueGenerationPanel').hidden = input.value !== 'dialogue';
+  $('#voicePackPanel').hidden = input.value !== 'voice_pack';
   $('#productionError').hidden = true;
   updateReadiness();
+}));
+document.querySelectorAll('input[name="targetLanguage"]').forEach((input) => input.addEventListener('change', () => {
+  if (!input.checked || !voicePackDraft.length) return;
+  voicePackDraft = [];
+  renderVoicePackDraft();
+  $('#voicePackError').textContent = 'Output language changed. Generate a new text draft in the selected language.';
+  $('#voicePackError').hidden = false;
 }));
 
 $('#produceBtn').addEventListener('click', async () => {
@@ -743,7 +904,12 @@ $('#produceBtn').addEventListener('click', async () => {
         revision_limit: Number($('#revisionLimit').value),
         single_character_id: workflowMode === 'single' ? $('#productionCharacter').value : null,
         single_emotion: workflowMode === 'single' ? $('#singleVoiceEmotion').value.trim() : null,
-        single_text: workflowMode === 'single' ? $('#singleDialogueText').value.trim() : null
+        single_text: workflowMode === 'single' ? $('#singleDialogueText').value.trim() : null,
+        pack_character_id: workflowMode === 'voice_pack' ? $('#voicePackCharacter').value : null,
+        pack_lines: workflowMode === 'voice_pack' ? voicePackDraft.map((line) => ({
+          event: line.event, event_label: line.event_label, variant: line.variant,
+          emotion: line.emotion.trim(), text: line.text.trim()
+        })) : []
       })
     });
     $('#runPanel').hidden = false;
@@ -825,12 +991,14 @@ function renderResults(result) {
   const avg = Math.round(result.lines.reduce((sum, line) => sum + Number(line.qa.score || 0), 0) / result.lines.length);
   const revisions = result.lines.reduce((sum, line) => sum + Math.max(0, line.takes.length - 1), 0);
   const languages = {zh: 'Chinese', ja: 'Japanese', en: 'English'};
+  const workflowLabels = {single: 'SINGLE', dialogue: 'DIALOGUE', voice_pack: 'VOICE PACK'};
   $('#summaryGrid').innerHTML = `
-    <article><small>GENERATION TYPE</small><strong>${result.workflow_mode === 'single' ? 'SINGLE' : 'DIALOGUE'}</strong></article>
+    <article><small>GENERATION TYPE</small><strong>${workflowLabels[result.workflow_mode] || 'DIALOGUE'}</strong></article>
     <article><small>PRODUCTION TARGET</small><strong>${escapeHtml(result.production_mode).toUpperCase()}</strong></article>
     <article><small>OUTPUT LANGUAGE</small><strong>${languages[result.target_language]}</strong></article>
     <article><small>LOCKED CHARACTERS</small><strong>${result.casting.length}</strong></article>
     <article><small>APPROVED LINES</small><strong>${result.lines.filter((line) => line.approved).length}/${result.lines.length}</strong></article>
+    <article><small>NEEDS REVIEW</small><strong>${result.lines.filter((line) => line.needs_review).length}</strong></article>
     <article><small>AUTO REVISIONS</small><strong>${revisions}</strong></article>
     <article><small>AVERAGE SCORE</small><strong>${avg}</strong></article>`;
   const receipt = result.run_receipt || {};
@@ -861,17 +1029,59 @@ function renderResults(result) {
       ${!take.approved && index < line.takes.length - 1 ? revisionView(take.revision) : ''}
     </div>`).join('');
     return `<section class="line-result">
-      <header class="line-heading"><div><span>LINE ${String(line.id).padStart(3, '0')} · ${escapeHtml(line.character)}</span>
+      <header class="line-heading"><div><span>${line.voice_event ? `VOICE EVENT · ${escapeHtml(line.voice_event)} ${String(line.voice_variant || 1).padStart(2, '0')}` : `LINE ${String(line.id).padStart(3, '0')}`} · ${escapeHtml(line.character)}</span>
         <h3>${escapeHtml(line.text)}</h3>
         ${line.source_text !== line.text ? `<p>Source: ${escapeHtml(line.source_text)}</p>` : ''}
         <small>${escapeHtml(line.emotion)} · ${escapeHtml(line.pace)} · VOICE ${escapeHtml(line.voice)} 🔒</small></div>
         <div><span>SELECTED TAKE</span><strong>${String(line.selected_take).padStart(2, '0')}</strong></div></header>
+      ${line.needs_review ? `<div class="line-recovery-warning"><div><strong>${line.best_available ? 'BEST AVAILABLE · NEEDS REVIEW' : 'BELOW TARGET · NEEDS REVIEW'}</strong>
+        <p>${escapeHtml(line.generation_warning || 'The best generated take is below the selected production target.')}</p></div>
+        <button type="button" class="retry-result-line" data-line-index="${result.lines.indexOf(line)}">RETRY THIS LINE</button></div>` : ''}
       <div class="takes">${takes}</div>
     </section>`;
   }).join('');
+  document.querySelectorAll('.retry-result-line').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const line = result.lines[Number(button.dataset.lineIndex)];
+      const character = project?.characters.find((item) => item.name === line.character);
+      if (!character) {
+        $('#productionError').textContent = `Character ${line.character} is no longer available in this project.`;
+        $('#productionError').hidden = false;
+        return;
+      }
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = 'QUEUING RETRY…';
+      try {
+        currentJob = await api(`/api/projects/${project.id}/produce`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            target_language: result.target_language,
+            production_mode: result.production_mode,
+            workflow_mode: 'single',
+            revision_limit: Number(result.agent_revision_limit ?? 2),
+            single_character_id: character.id,
+            single_emotion: line.emotion,
+            single_text: line.text
+          })
+        });
+        $('#runPanel').hidden = false;
+        $('#results').hidden = true;
+        renderJob(currentJob);
+        $('#runPanel').scrollIntoView({behavior: 'smooth', block: 'center'});
+        poll(currentJob.id);
+      } catch (err) {
+        button.disabled = false;
+        button.textContent = original;
+        $('#productionError').textContent = err.message;
+        $('#productionError').hidden = false;
+      }
+    });
+  });
   $('#results').hidden = false;
   $('#results').scrollIntoView({behavior: 'smooth'});
 }
 
 checkHealth();
 loadProjects();
+loadVoiceEvents();

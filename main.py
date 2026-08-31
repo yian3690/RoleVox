@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import os
 import re
 import threading
@@ -24,14 +25,15 @@ load_dotenv()
 from app.models import (  # noqa: E402
     CharacterRecord, CharacterRecastCreate, CharacterUpdate, DialogueCreate, DialogueRecord, InboxManifest,
     JobEvent, JobRecord, ProductionCreate,
-    ProjectCreate, ProjectRecord, ProjectRequest, ProjectUpdate, VoicePreviewCreate,
+    ProjectCreate, ProjectRecord, ProjectRequest, ProjectUpdate, VoicePackDraftCreate,
+    VoicePreviewCreate,
     VoiceSelectionCreate,
 )
 from app import state_store  # noqa: E402
 from app import task_queue  # noqa: E402
 from app.pipeline import (  # noqa: E402
     ARTIFACT_ROOT, CLOUD_LOCATION, DEMO_MODE, TEXT_MODEL, TTS_MODEL,
-    USE_ADK_ORCHESTRATION, VOICE_LIBRARY, engine,
+    USE_ADK_ORCHESTRATION, VOICE_EVENT_CATALOG, VOICE_EVENT_MAP, VOICE_LIBRARY, engine,
 )
 
 app = FastAPI(title="RoleVox", version="0.2.0")
@@ -187,6 +189,9 @@ def update_project(project_id: str, payload: ProjectUpdate) -> ProjectRecord:
     with PROJECT_LOCK:
         for key, value in cleaned.items():
             setattr(project, key, value)
+        if any(key in cleaned for key in ("scene", "background")):
+            for character in project.characters:
+                character.casting.pop("preview_lines", None)
         _touch(project)
         _save_project(project)
     return project
@@ -208,6 +213,7 @@ def update_character(project_id: str, character_id: str,
         character.name = name
         character.brief = brief
         character.casting["character"] = name
+        character.casting.pop("preview_lines", None)
         _touch(project)
         _save_project(project)
     return project
@@ -403,11 +409,49 @@ def preview_character_voice(project_id: str, character_id: str,
     if not candidate:
         raise HTTPException(422, "Unknown audition voice.")
     try:
-        wav = engine.preview_voice(character.name, candidate, payload.language)
+        preview_lines = character.casting.setdefault("preview_lines", {})
+        sample = preview_lines.get(payload.language)
+        if not isinstance(sample, dict) or not sample.get("text"):
+            sample = engine.generate_preview_line(
+                project.title, project.scene, project.background,
+                character.name, character.brief, payload.language,
+            )
+            with PROJECT_LOCK:
+                character.casting.setdefault("preview_lines", {})[payload.language] = sample
+                _touch(project)
+                _save_project(project)
+        wav = engine.preview_voice(character.name, candidate, payload.language, sample)
     except Exception as exc:
         raise HTTPException(502, f"Voice audition could not be generated: {exc}") from exc
+    preview_text = base64.b64encode(sample["text"].encode("utf-8")).decode("ascii")
     return Response(content=wav, media_type="audio/wav",
-                    headers={"Content-Disposition": f'inline; filename="{character.id}_{payload.voice}.wav"'})
+                    headers={"Content-Disposition": f'inline; filename="{character.id}_{payload.voice}.wav"',
+                             "X-RoleVox-Preview-Text-B64": preview_text})
+
+
+@app.get("/api/voice-events")
+def list_voice_events() -> list[dict]:
+    return VOICE_EVENT_CATALOG
+
+
+@app.post("/api/projects/{project_id}/voice-pack/draft")
+def create_voice_pack_draft(project_id: str, payload: VoicePackDraftCreate) -> dict:
+    if not engine.is_configured():
+        raise HTTPException(503, "Vertex AI is not configured.")
+    project = _project_or_404(project_id)
+    character = _character_or_404(project, payload.character_id)
+    selections = [item.model_dump() for item in payload.events]
+    try:
+        lines = engine.generate_voice_pack_draft(
+            project.title, project.scene, project.background,
+            character.name, character.brief, payload.language, selections,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Voice Pack Writer could not create the draft: {exc}") from exc
+    return {"character_id": character.id, "character": character.name,
+            "language": payload.language, "lines": lines}
 
 
 @app.post("/api/projects/{project_id}/characters/{character_id}/unlock", response_model=ProjectRecord)
@@ -496,6 +540,22 @@ def _prepare_project_production(
         single_emotion = (payload.single_emotion or "").strip()
         if not single_text or not single_emotion:
             raise HTTPException(422, "Single-character generation requires emotion and dialogue text.")
+    elif payload.workflow_mode == "voice_pack":
+        selected_characters = [item for item in project.characters
+                               if item.id == payload.pack_character_id]
+        if not selected_characters:
+            raise HTTPException(404, "Select a character for voice-pack generation.")
+        if not payload.pack_lines:
+            raise HTTPException(422, "Generate and approve at least one voice-pack draft line.")
+        seen_variants: set[tuple[str, int]] = set()
+        for line in payload.pack_lines:
+            event = VOICE_EVENT_MAP.get(line.event)
+            if not event or line.event_label != event["label"]:
+                raise HTTPException(422, f"Unknown voice-pack event: {line.event}")
+            key = (line.event, line.variant)
+            if key in seen_variants:
+                raise HTTPException(422, f"Duplicate voice-pack variant: {line.event} {line.variant}")
+            seen_variants.add(key)
     else:
         selected_characters = [item for item in project.characters if item.dialogues]
         if payload.character_id:  # Backward-compatible single-speaker script production.
@@ -508,11 +568,20 @@ def _prepare_project_production(
     script_lines: list[str] = []
     line_emotions: dict[int, str] = {}
     line_addressees: dict[int, str] = {}
+    line_events: dict[int, str] = {}
+    line_variants: dict[int, int] = {}
     line_id = 0
     if payload.workflow_mode == "single":
         character = selected_characters[0]
         script_lines.append(f"{character.name}: {single_text}")
         line_emotions[1] = single_emotion
+    elif payload.workflow_mode == "voice_pack":
+        character = selected_characters[0]
+        for line_id, line in enumerate(payload.pack_lines, start=1):
+            script_lines.append(f"{character.name}: {line.text}")
+            line_emotions[line_id] = line.emotion
+            line_events[line_id] = line.event
+            line_variants[line_id] = line.variant
     else:
         selected_ids = {item.id for item in selected_characters}
         character_names = {item.id: item.name for item in project.characters}
@@ -536,6 +605,7 @@ def _prepare_project_production(
         max_retries=payload.revision_limit, production_mode=payload.production_mode,
         workflow_mode=payload.workflow_mode,
         line_emotions=line_emotions, line_addressees=line_addressees,
+        line_events=line_events, line_variants=line_variants,
         locked_casting=[item.casting for item in selected_characters],
         run_origin=run_origin,
     )

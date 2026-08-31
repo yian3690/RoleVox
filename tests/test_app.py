@@ -67,6 +67,13 @@ def test_generation_cards_and_transient_poll_retry_are_present():
     assert ".generation-mode-picker" in css
     assert "[429, 503].includes(err.status)" in script
     assert "Production worker is busy. Retrying automatically" in script
+    assert 'value="voice_pack"' in html
+    assert 'id="voiceEventCatalog"' in html
+    assert "/api/projects/${project.id}/voice-pack/draft" in script
+    assert "pack_lines: workflowMode === 'voice_pack'" in script
+    assert "checkbox.checked = true" in script
+    assert "BEST AVAILABLE · NEEDS REVIEW" in script
+    assert "retry-result-line" in script
 
 
 def test_character_workspace_readability_and_control_spacing_are_present():
@@ -77,6 +84,13 @@ def test_character_workspace_readability_and_control_spacing_are_present():
     assert "#characterDialog .voice-candidate p{font-size:13px" in css
     assert "#characterDialog .reasoning-callout strong{display:block;font-size:20px" in css
     assert "#characterDialog .dialog-columns>section:first-child .detail-list dd{font-size:14px" in css
+    assert ".generation-mode-picker small{font-size:12px" in css
+    assert "max-width:none;font-size:11px" in css
+    assert "voice-pack-character{display:grid;grid-template-columns:max-content 300px" in css
+    assert "voice-event-option select{box-sizing:border-box;width:92px" in css
+    assert "textarea.pack-text{box-sizing:border-box;width:100%;height:68px" in css
+    assert ".revision-grid div{display:grid;grid-template-columns:90px minmax(0,1fr)" in css
+    assert ".take blockquote{box-sizing:border-box;height:132px" in css
 
 
 def test_inbox_ignores_output_objects(monkeypatch):
@@ -352,6 +366,11 @@ def test_project_voice_lock_and_agentic_revision_flow(isolated_project_store):
     )
     assert preview_response.status_code == 200
     assert preview_response.content.startswith(b"RIFF")
+    preview_text = base64.b64decode(
+        preview_response.headers["x-rolevox-preview-text-b64"]
+    ).decode("utf-8")
+    assert "Aren" in preview_text
+    assert "Gate" in preview_text
     select_response = client.post(
         f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
         json={"voice": candidate_voice},
@@ -432,6 +451,105 @@ def test_project_voice_lock_and_agentic_revision_flow(isolated_project_store):
     assert line["takes"][0]["revision"]["speaking_rate"]["to"] == 0.87
     assert line["takes"][1]["qa"]["score"] == 93
     assert line["takes"][1]["approved"] is True
+
+
+def test_voice_pack_draft_review_and_standardized_assets(isolated_project_store):
+    catalog = client.get("/api/voice-events")
+    assert catalog.status_code == 200
+    assert any(item["key"] == "greeting" and item["min"] == 3 for item in catalog.json())
+
+    project = client.post("/api/projects", json={
+        "title": "Voice Pack Test", "scene": "Moonlit Gate",
+        "background": "An original guardian protects a ruined city gate at night.",
+    }).json()
+    project = client.post(
+        f"/api/projects/{project['id']}/characters",
+        data={"name": "Aria", "brief": "A disciplined young guardian who hides her concern.",
+              "voice_presentation": "feminine"},
+        files={"image": ("aria.png", b"\x89PNG\r\n\x1a\nvoice-pack", "image/png")},
+    ).json()
+    character = project["characters"][0]
+    voice = character["casting"]["voice_candidates"][0]["voice"]
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
+        json={"voice": voice},
+    ).status_code == 200
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/lock"
+    ).status_code == 200
+
+    draft_response = client.post(f"/api/projects/{project['id']}/voice-pack/draft", json={
+        "character_id": character["id"], "language": "en",
+        "events": [{"event": "greeting", "count": 3},
+                   {"event": "combat_start", "count": 3}],
+    })
+    assert draft_response.status_code == 200
+    draft = draft_response.json()["lines"]
+    assert len(draft) == 6
+    assert [line["variant"] for line in draft[:3]] == [1, 2, 3]
+    assert all(len(line["emotion"].split(" · ")) == 3 for line in draft)
+    assert pipeline_module._voice_pack_emotion("Resolute", "boss_defeated") == (
+        "Resolute · exhausted · relieved"
+    )
+    draft[0]["text"] = "You made it. Stay close while we cross the gate."
+
+    production = client.post(f"/api/projects/{project['id']}/produce", json={
+        "target_language": "en", "production_mode": "draft", "revision_limit": 0,
+        "workflow_mode": "voice_pack", "pack_character_id": character["id"],
+        "pack_lines": draft,
+    })
+    assert production.status_code == 202
+    result = client.get(f"/api/jobs/{production.json()['id']}").json()["result"]
+    assert result["workflow_mode"] == "voice_pack"
+    assert len(result["lines"]) == 6
+    assert result["lines"][0]["file"] == "aria_greeting_01.wav"
+    assert result["lines"][3]["file"] == "aria_combat_start_01.wav"
+    assert result["lines"][0]["voice_event"] == "greeting"
+    assert client.get(f"/api/projects/{project['id']}").json()["characters"][0]["dialogues"] == []
+
+
+def test_failed_revision_preserves_best_take_and_completes(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline_module, "ARTIFACT_ROOT", tmp_path)
+    monkeypatch.setattr(pipeline_module.state_store, "save_job", lambda *_: None)
+    workflow = WorkflowEngine()
+    monkeypatch.setattr(workflow, "_upload_optional", lambda *_: None)
+    calls = []
+
+    def flaky_tts(client, line, cast, direction, attempt, feedback=""):
+        calls.append(attempt)
+        if attempt == 0:
+            return workflow._demo_wav(line, cast["voice"], attempt)
+        raise RuntimeError(
+            "Gemini TTS could not complete line 1 after 3 recovery attempts with locked voice Charon."
+        )
+
+    monkeypatch.setattr(workflow, "_tts", flaky_tts)
+    request = ProjectRequest(
+        title="Recovery Test", scene="Throne Room", background="An ancient ruler retreats.",
+        target_language="en", script="Odric: Fall back and regroup.",
+        quality_threshold=86, max_retries=1, workflow_mode="single",
+        line_emotions={1: "Resolute · urgent · heavy-hearted"},
+        character_descriptions={"Odric": "An ancient, weathered ruler."},
+        locked_casting=[{
+            "character": "Odric", "voice": "Charon", "profile": "deep and weathered",
+            "voice_locked": True, "voice_identity": {"voice": "Charon", "locked": True},
+        }],
+    )
+    job = workflow.create("recoverjob01", request)
+    workflow.run(job, request)
+
+    assert calls == [0, 1]
+    assert job.status == "completed"
+    assert job.error is None
+    assert job.result["needs_review_count"] == 1
+    line = job.result["lines"][0]
+    assert line["best_available"] is True
+    assert line["needs_review"] is True
+    assert line["selected_take"] == 1
+    assert line["file"].endswith(".wav")
+    assert (tmp_path / job.id / line["file"]).is_file()
+    assert any(event.agent == "Voice Recovery Agent" for event in job.events)
+    assert job.result["run_receipt"]["lines"][0]["best_available"] is True
 
 
 def test_project_dialogue_order_target_edit_and_recast(isolated_project_store):

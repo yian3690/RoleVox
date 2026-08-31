@@ -41,12 +41,13 @@
 #characterDialog .voice-candidate p{font-size:13px;line-height:1.55;margin:8px 0}
 #characterDialog .voice-candidate small{font-size:10px;line-height:1.6}
 #characterDialog .candidate-actions button{height:38px;font-size:9px}
+#characterDialog .audition-preview-line{margin:9px 0 0;padding:9px 11px;border-left:3px solid var(--acid);background:#e8e4da;font-size:11px;line-height:1.6;font-style:italic}
 
 /* Generation type and output language */
 .generation-mode-picker legend,.language-picker legend,.mode-picker legend{font-size:10px;line-height:1.45}
 .generation-mode-picker label{min-height:96px;padding:18px 21px}
 .generation-mode-picker b{font-size:18px;line-height:1.2}
-.generation-mode-picker small{font-size:10px;line-height:1.55}
+.generation-mode-picker small{font-size:12px;line-height:1.6}
 .generation-mode-picker i{font-size:13px}
 .language-picker label,.mode-picker label{min-height:82px;padding:15px 16px}
 .language-picker label b,.mode-picker label b{font-size:16px;line-height:1.25}
@@ -70,6 +71,15 @@
 .revision-control select{min-width:180px;font-size:14px}
 .production-console>.primary-action.full{height:60px;font-size:12px}
 
+/* Character Voice Pack form readability. */
+.voice-pack-panel .voice-pack-character{display:grid;grid-template-columns:max-content 300px;align-items:center;column-gap:36px;max-width:none;font-size:11px;line-height:1.45;letter-spacing:.08em}
+.voice-pack-panel .voice-pack-character select{box-sizing:border-box;width:300px;height:50px;margin:0;padding:0 38px 0 14px;font-size:15px}
+.voice-pack-panel .voice-event-option{grid-template-columns:22px minmax(0,1fr) 92px}
+.voice-pack-panel .voice-event-option select{box-sizing:border-box;width:92px;min-width:92px;padding:0 28px 0 10px;font-size:12px}
+.voice-pack-panel .voice-pack-line{grid-template-columns:145px minmax(220px,.8fr) minmax(260px,1.2fr) 38px}
+.voice-pack-panel .voice-pack-line input.pack-emotion,
+.voice-pack-panel .voice-pack-line textarea.pack-text{box-sizing:border-box;width:100%;height:68px;min-height:68px;margin-top:7px;padding:11px 13px;font-size:14px;line-height:1.5}
+
 /* Live agent run */
 .event-log{max-height:330px}
 .event{grid-template-columns:96px 170px minmax(0,1fr);gap:15px;padding:12px 3px;font-size:11px;line-height:1.55}
@@ -79,8 +89,13 @@
 .line-heading h3{font-size:24px;line-height:1.35;margin:9px 0 6px}
 .line-heading p,.line-heading small{font-size:10px;line-height:1.65}
 .line-heading>div:last-child strong{font-size:36px}
+.line-recovery-warning{display:flex;align-items:center;justify-content:space-between;gap:22px;margin-top:16px;padding:14px 16px;border:1px solid var(--orange);background:#fff0e9}
+.line-recovery-warning strong{font:700 11px DM Mono;color:var(--orange)}
+.line-recovery-warning p{margin:6px 0 0;font-size:11px;line-height:1.55;color:#5d514b}
+.line-recovery-warning button{flex:0 0 auto;min-width:165px;height:42px;border:1px solid var(--ink);background:var(--ink);color:var(--acid);font:700 9px DM Mono;cursor:pointer}
+.line-recovery-warning button:disabled{opacity:.55;cursor:wait}
 .takes{grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:17px}
-.take{padding:18px}
+.take{display:flex;flex-direction:column;padding:18px}
 .take header span{font-size:9px}
 .take header strong{font-size:10px}
 .overall{font-size:34px}
@@ -88,12 +103,14 @@
 .metric-grid div{padding:8px}
 .metric-grid span{font-size:9px}
 .metric-grid strong{font-size:13px}
-.take blockquote{margin:13px 0;padding:11px 12px;font-size:12px;line-height:1.65}
-.revision-title{padding:10px 11px;font-size:9px}
-.revision-grid{padding:10px}
-.revision-grid div{padding:7px}
-.revision-grid span{font-size:9px}
-.revision-grid b{font-size:10px}
+.take blockquote{box-sizing:border-box;height:132px;margin:13px 0;padding:12px 14px;overflow:auto;font-size:12px;line-height:1.65}
+.take audio{margin-top:auto}
+.revision-title{align-items:center;gap:18px;padding:12px 14px;font-size:11px;line-height:1.4}
+.revision-title strong{font-size:11px;text-align:right}
+.revision-grid{gap:4px 16px;padding:13px 14px}
+.revision-grid div{display:grid;grid-template-columns:90px minmax(0,1fr);align-items:start;gap:12px;padding:9px 6px}
+.revision-grid span{font-size:10px;line-height:1.45}
+.revision-grid b{font-size:12px;line-height:1.45;text-align:right;overflow-wrap:anywhere}
 
 @media(max-width:1100px){
   .project-dialogue-line{grid-template-columns:42px 145px minmax(0,1fr) 82px}
@@ -110,8 +127,15 @@
   .event{grid-template-columns:72px minmax(0,1fr);font-size:10px}
   .event p{grid-column:1/-1}
   .line-heading h3{font-size:20px}
+  .line-recovery-warning{align-items:stretch;flex-direction:column}
+  .line-recovery-warning button{width:100%}
   .takes{grid-template-columns:1fr}
   #characterDialog .dialog-header{padding-right:38px}
   #characterDialog .dialog-lock{margin-right:0}
   #characterDialog .reasoning-callout strong{font-size:18px}
+  .voice-pack-panel .voice-pack-character{grid-template-columns:1fr;row-gap:9px}
+  .voice-pack-panel .voice-pack-character select{width:100%}
+  .voice-pack-panel .voice-pack-line{grid-template-columns:1fr 38px}
+  .revision-grid{grid-template-columns:1fr}
+  .take blockquote{height:auto;min-height:110px}
 }
