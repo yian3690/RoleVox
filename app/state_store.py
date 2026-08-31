@@ -97,6 +97,19 @@ def get_job(job_id: str) -> JobRecord | None:
     return JobRecord.model_validate(snapshot.to_dict()) if snapshot.exists else None
 
 
+def list_jobs(project_id: str, limit: int = 30) -> list[JobRecord]:
+    client = _firestore()
+    if client is None:
+        return []
+    jobs = []
+    for snapshot in client.collection("jobs").stream():
+        payload = snapshot.to_dict() or {}
+        if payload.get("project_id") == project_id:
+            jobs.append(JobRecord.model_validate(payload))
+    jobs.sort(key=lambda item: item.created_at, reverse=True)
+    return jobs[:limit]
+
+
 def _bucket():
     bucket_name = os.getenv("GCS_BUCKET", "").strip()
     if not enabled() or not bucket_name:
@@ -130,6 +143,16 @@ def load_artifact(job_id: str, filename: str) -> bytes | None:
         return None
     blob = bucket.blob(f"rolevox/{job_id}/{filename}")
     return blob.download_as_bytes() if blob.exists() else None
+
+
+def save_artifact(job_id: str, filename: str, data: bytes,
+                  content_type: str = "application/octet-stream") -> None:
+    bucket = _bucket()
+    if bucket is None:
+        return
+    bucket.blob(f"rolevox/{job_id}/{filename}").upload_from_string(
+        data, content_type=content_type,
+    )
 
 
 def claim_inbox_event(event_key: str, job_id: str) -> tuple[bool, str | None]:

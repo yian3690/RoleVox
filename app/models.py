@@ -168,6 +168,8 @@ class JobEvent(BaseModel):
 class JobRecord(BaseModel):
     id: str
     title: str
+    project_id: str | None = None
+    workflow_mode: Literal["single", "dialogue", "voice_pack"] | None = None
     status: Literal["queued", "running", "completed", "failed"] = "queued"
     progress: int = 0
     stage: str = "Queued"
@@ -177,3 +179,7 @@ class JobRecord(BaseModel):
     events: list[JobEvent] = Field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
+
+
+class MergeRetryCreate(BaseModel):
+    replacement_job_id: str = Field(min_length=1, max_length=40)

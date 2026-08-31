@@ -513,6 +513,115 @@ def test_voice_pack_draft_review_and_standardized_assets(isolated_project_store)
     assert client.get(f"/api/projects/{project['id']}").json()["characters"][0]["dialogues"] == []
 
 
+def test_production_readiness_features_import_history_exports_and_merge(isolated_project_store):
+    project = client.post("/api/projects", json={
+        "title": "Readiness Test", "scene": "Forest Gate",
+        "background": "An original scout guards a rain-soaked forest gate.",
+    }).json()
+    project = client.post(
+        f"/api/projects/{project['id']}/characters",
+        data={"name": "Aria", "brief": "A vigilant scout with a steady, restrained delivery.",
+              "voice_presentation": "feminine"},
+        files={"image": ("aria.png", b"\x89PNG\r\n\x1a\nreadiness", "image/png")},
+    ).json()
+    character = project["characters"][0]
+    breakdown = character["casting"]["confidence_breakdown"]
+    assert set(breakdown) == {"image_evidence", "brief_alignment", "scene_alignment"}
+
+    imported = client.post(
+        f"/api/projects/{project['id']}/dialogues/import",
+        files={"file": ("script.csv",
+                        "character,text,emotion\nAria,Someone is beyond the gate,Alert · restrained · urgent\n",
+                        "text/csv")},
+    )
+    assert imported.status_code == 200
+    assert imported.json()["characters"][0]["dialogues"][0]["text"] == "Someone is beyond the gate"
+    voice = character["casting"]["voice_candidates"][0]["voice"]
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/select-voice",
+        json={"voice": voice},
+    ).status_code == 200
+    assert client.post(
+        f"/api/projects/{project['id']}/characters/{character['id']}/lock"
+    ).status_code == 200
+
+    original_response = client.post(f"/api/projects/{project['id']}/produce", json={
+        "target_language": "en", "production_mode": "draft", "revision_limit": 0,
+        "workflow_mode": "dialogue",
+    })
+    original = client.get(f"/api/jobs/{original_response.json()['id']}").json()
+    assert original["status"] == "completed"
+    result = original["result"]
+    assert result["voice_consistency"]["overall"] > 0
+    assert {item["engine"] for item in result["export_presets"]} == {
+        "Generic", "Unity", "Godot", "Unreal",
+    }
+    for preset in result["export_presets"]:
+        assert client.get(
+            f"/api/jobs/{original['id']}/exports/{preset['file']}"
+        ).status_code == 200
+    package = client.get(result["package_url"])
+    with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
+        names = set(archive.namelist())
+        assert "generic_dialogue_manifest.csv" in names
+        assert "unity_rolevox_manifest.json" in names
+        assert "godot_rolevox_manifest.json" in names
+        assert "unreal_rolevox_datatable.json" in names
+
+    history = client.get(f"/api/projects/{project['id']}/jobs")
+    assert history.status_code == 200
+    assert any(item["id"] == original["id"] for item in history.json())
+
+    retry_response = client.post(f"/api/projects/{project['id']}/produce", json={
+        "target_language": "en", "production_mode": "production", "revision_limit": 1,
+        "workflow_mode": "single", "single_character_id": character["id"],
+        "single_emotion": "Alert · restrained · urgent",
+        "single_text": "Someone is beyond the gate",
+    })
+    retry = client.get(f"/api/jobs/{retry_response.json()['id']}").json()
+    merged = client.post(
+        f"/api/jobs/{original['id']}/lines/1/merge-retry",
+        json={"replacement_job_id": retry["id"]},
+    )
+    assert merged.status_code == 200
+    merged_job = merged.json()
+    assert merged_job["id"] == original["id"]
+    assert merged_job["result"]["lines"][0]["merged_retry_job_id"] == retry["id"]
+    assert merged_job["result"]["run_receipt"]["merged_retries"][0]["line_id"] == 1
+    assert client.get(merged_job["result"]["package_url"]).status_code == 200
+
+
+def test_xlsx_and_plain_text_script_imports(isolated_project_store):
+    from openpyxl import Workbook
+
+    project = client.post("/api/projects", json={
+        "title": "Import Test", "scene": "Camp", "background": "An original camp scene.",
+    }).json()
+    project = client.post(
+        f"/api/projects/{project['id']}/characters",
+        data={"name": "Rin", "brief": "A calm traveller.", "voice_presentation": "neutral"},
+        files={"image": ("rin.png", b"\x89PNG\r\n\x1a\nimport", "image/png")},
+    ).json()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Character", "Text", "Emotion"])
+    sheet.append(["Rin", "The road is quiet.", "Calm · watchful · subdued"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    response = client.post(
+        f"/api/projects/{project['id']}/dialogues/import",
+        files={"file": ("lines.xlsx", buffer.getvalue(),
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    assert response.status_code == 200
+    text_response = client.post(
+        f"/api/projects/{project['id']}/dialogues/import",
+        files={"file": ("scene.yarn", "Rin: We should keep moving.", "text/plain")},
+    )
+    assert text_response.status_code == 200
+    assert len(text_response.json()["characters"][0]["dialogues"]) == 2
+
+
 def test_failed_revision_preserves_best_take_and_completes(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline_module, "ARTIFACT_ROOT", tmp_path)
     monkeypatch.setattr(pipeline_module.state_store, "save_job", lambda *_: None)

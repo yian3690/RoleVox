@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import json
 import base64
+import csv
+import io
+import hashlib
 import os
 import re
 import threading
 import shutil
 import traceback
 import uuid
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,7 +28,7 @@ load_dotenv()
 
 from app.models import (  # noqa: E402
     CharacterRecord, CharacterRecastCreate, CharacterUpdate, DialogueCreate, DialogueRecord, InboxManifest,
-    JobEvent, JobRecord, ProductionCreate,
+    JobEvent, JobRecord, MergeRetryCreate, ProductionCreate,
     ProjectCreate, ProjectRecord, ProjectRequest, ProjectUpdate, VoicePackDraftCreate,
     VoicePreviewCreate,
     VoiceSelectionCreate,
@@ -33,7 +37,8 @@ from app import state_store  # noqa: E402
 from app import task_queue  # noqa: E402
 from app.pipeline import (  # noqa: E402
     ARTIFACT_ROOT, CLOUD_LOCATION, DEMO_MODE, TEXT_MODEL, TTS_MODEL,
-    USE_ADK_ORCHESTRATION, VOICE_EVENT_CATALOG, VOICE_EVENT_MAP, VOICE_LIBRARY, engine,
+    USE_ADK_ORCHESTRATION, VOICE_EVENT_CATALOG, VOICE_EVENT_MAP, VOICE_LIBRARY,
+    build_consistency_dashboard, build_export_presets, engine,
 )
 
 app = FastAPI(title="RoleVox", version="0.2.0")
@@ -485,6 +490,86 @@ def add_dialogue(project_id: str, character_id: str, payload: DialogueCreate) ->
     return project
 
 
+def _normalize_import_rows(filename: str, data: bytes) -> list[dict[str, str]]:
+    suffix = Path(filename).suffix.casefold()
+    rows: list[dict] = []
+    if suffix == ".json":
+        payload = json.loads(data.decode("utf-8-sig"))
+        rows = payload.get("lines", []) if isinstance(payload, dict) else payload
+        if not isinstance(rows, list):
+            raise ValueError("JSON must be an array or an object with a lines array.")
+    elif suffix == ".csv":
+        rows = list(csv.DictReader(io.StringIO(data.decode("utf-8-sig"))))
+    elif suffix == ".xlsx":
+        from openpyxl import load_workbook
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        sheet = workbook.active
+        values = list(sheet.iter_rows(values_only=True))
+        if not values:
+            return []
+        headers = [str(value or "").strip().casefold() for value in values[0]]
+        rows = [dict(zip(headers, row)) for row in values[1:]]
+    elif suffix in {".ink", ".yarn", ".txt"}:
+        for raw in data.decode("utf-8-sig").splitlines():
+            line = raw.strip()
+            if not line or line.startswith(("//", "#", "===", "---", "<<", "title:", "tags:")):
+                continue
+            parts = re.split(r"[:：]", line, maxsplit=1)
+            if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+                rows.append({"character": parts[0].strip(), "text": parts[1].strip()})
+    else:
+        raise ValueError("Supported formats: CSV, JSON, XLSX, Ink, Yarn, and TXT.")
+
+    normalized = []
+    for index, raw in enumerate(rows, start=2):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Row {index} must be an object.")
+        lowered = {str(key).strip().casefold(): str(value or "").strip()
+                   for key, value in raw.items()}
+        character = lowered.get("character") or lowered.get("speaker") or lowered.get("角色")
+        text = lowered.get("text") or lowered.get("dialogue") or lowered.get("台詞") or lowered.get("文本")
+        emotion = lowered.get("emotion") or lowered.get("voice emotion") or lowered.get("情緒") or "Context-aware · natural · character-authentic"
+        addressee = lowered.get("addressee") or lowered.get("speaking_to") or lowered.get("speaking to") or lowered.get("對象") or ""
+        if not character or not text:
+            raise ValueError(f"Row {index} requires character/speaker and text/dialogue.")
+        normalized.append({"character": character, "text": text, "emotion": emotion,
+                           "addressee": addressee})
+    if len(normalized) > 500:
+        raise ValueError("Import is limited to 500 dialogue lines per file.")
+    return normalized
+
+
+@app.post("/api/projects/{project_id}/dialogues/import")
+async def import_project_dialogues(project_id: str, file: UploadFile = File(...)) -> ProjectRecord:
+    project = _project_or_404(project_id)
+    data = await file.read()
+    if not data or len(data) > 5 * 1024 * 1024:
+        raise HTTPException(422, "Script file must be between 1 byte and 5 MB.")
+    try:
+        rows = _normalize_import_rows(file.filename or "script.txt", data)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(422, f"Script import failed: {exc}") from exc
+    if not rows:
+        raise HTTPException(422, "No dialogue lines were found in the imported file.")
+    by_name = {item.name.casefold(): item for item in project.characters}
+    missing = sorted({row["character"] for row in rows if row["character"].casefold() not in by_name})
+    if missing:
+        raise HTTPException(422, f"Create these Character Cards before import: {', '.join(missing)}")
+    with PROJECT_LOCK:
+        next_order = max((line.order for item in project.characters for line in item.dialogues), default=0) + 1
+        for row in rows:
+            character = by_name[row["character"].casefold()]
+            addressee = by_name.get(row["addressee"].casefold()) if row["addressee"] else None
+            character.dialogues.append(DialogueRecord(
+                id=uuid.uuid4().hex[:10], order=next_order, emotion=row["emotion"][:80],
+                text=row["text"][:4000], addressee_id=addressee.id if addressee else None,
+            ))
+            next_order += 1
+        _touch(project)
+        _save_project(project)
+    return project
+
+
 @app.patch("/api/projects/{project_id}/characters/{character_id}/dialogues/{dialogue_id}",
            response_model=ProjectRecord)
 def update_dialogue(project_id: str, character_id: str, dialogue_id: str,
@@ -614,7 +699,7 @@ def _prepare_project_production(
         for item in selected_characters
         if (reference := _image_reference(project, item)) is not None
     }
-    job = engine.create(job_id or uuid.uuid4().hex[:12], request)
+    job = engine.create(job_id or uuid.uuid4().hex[:12], request, project.id)
     return job, request, character_images
 
 
@@ -860,12 +945,143 @@ def get_job(job_id: str) -> JobRecord:
     return job
 
 
+@app.get("/api/projects/{project_id}/jobs")
+def list_project_jobs(project_id: str) -> list[dict]:
+    _project_or_404(project_id)
+    combined = {job.id: job for job in state_store.list_jobs(project_id)}
+    combined.update({job.id: job for job in engine.jobs.values() if job.project_id == project_id})
+    jobs = sorted(combined.values(), key=lambda item: item.created_at, reverse=True)[:30]
+    return [{
+        "id": job.id, "status": job.status, "stage": job.stage,
+        "progress": job.progress, "workflow_mode": job.workflow_mode,
+        "created_at": job.created_at, "updated_at": job.updated_at,
+        "line_count": len((job.result or {}).get("lines", [])),
+        "needs_review_count": int((job.result or {}).get("needs_review_count", 0)),
+        "target_language": (job.result or {}).get("target_language"),
+        "production_mode": (job.result or {}).get("production_mode"),
+        "package_url": f"/api/jobs/{job.id}/package" if job.status == "completed" else None,
+        "error": job.error,
+    } for job in jobs]
+
+
 def _safe_file(job_id: str, filename: str) -> Path:
     job_dir = (ARTIFACT_ROOT / job_id).resolve()
     path = (job_dir / filename).resolve()
     if path.parent != job_dir or not path.is_file():
         raise HTTPException(404, "File not found")
     return path
+
+
+def _artifact_bytes(job_id: str, filename: str) -> bytes:
+    try:
+        return _safe_file(job_id, filename).read_bytes()
+    except HTTPException:
+        data = state_store.load_artifact(job_id, filename)
+        if data is None:
+            raise HTTPException(404, f"Artifact not found: {filename}")
+        return data
+
+
+def _persist_artifact(job_id: str, filename: str, data: bytes,
+                      content_type: str = "application/octet-stream") -> None:
+    job_dir = ARTIFACT_ROOT / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / filename).write_bytes(data)
+    state_store.save_artifact(job_id, filename, data, content_type)
+
+
+@app.post("/api/jobs/{job_id}/lines/{line_id}/merge-retry", response_model=JobRecord)
+def merge_retry(job_id: str, line_id: int, payload: MergeRetryCreate) -> JobRecord:
+    """Merge a successful one-line retry into the original durable package."""
+    original = engine.get(job_id)
+    replacement = engine.get(payload.replacement_job_id)
+    if not original or original.status != "completed" or not original.result:
+        raise HTTPException(409, "The original completed run is not available.")
+    if not replacement or replacement.status != "completed" or not replacement.result:
+        raise HTTPException(409, "The replacement run has not completed.")
+    if original.project_id != replacement.project_id:
+        raise HTTPException(409, "Retry and original run belong to different projects.")
+    replacement_lines = replacement.result.get("lines", [])
+    if len(replacement_lines) != 1:
+        raise HTTPException(422, "A merge retry must contain exactly one line.")
+    line_index = next((index for index, line in enumerate(original.result.get("lines", []))
+                       if int(line.get("id", -1)) == line_id), None)
+    if line_index is None:
+        raise HTTPException(404, "Original line not found.")
+
+    old = original.result["lines"][line_index]
+    fresh = replacement_lines[0]
+    final_name = old["file"]
+    _persist_artifact(job_id, final_name, _artifact_bytes(replacement.id, fresh["file"]), "audio/wav")
+    merged_takes = []
+    stem = Path(final_name).stem
+    for index, take in enumerate(fresh.get("takes", []), 1):
+        take_name = f"{stem}_retry_take{index:02d}.wav"
+        _persist_artifact(job_id, take_name, _artifact_bytes(replacement.id, take["file"]), "audio/wav")
+        merged_takes.append({**take, "file": take_name,
+                             "url": f"/api/jobs/{job_id}/files/{take_name}"})
+    merged = {
+        **old, **fresh, "id": old["id"], "file": final_name,
+        "url": f"/api/jobs/{job_id}/files/{final_name}", "takes": merged_takes,
+        "voice_event": old.get("voice_event"), "voice_variant": old.get("voice_variant"),
+        "merged_retry_job_id": replacement.id,
+    }
+    original.result["lines"][line_index] = merged
+    lines = original.result["lines"]
+    original.result["needs_review_count"] = sum(1 for line in lines if line.get("needs_review"))
+    original.result["voice_consistency"] = build_consistency_dashboard(lines)
+    exports = build_export_presets(
+        original.result.get("project", original.title), original.result.get("scene", ""),
+        original.result.get("target_language", "en"), lines,
+    )
+    for name, data in exports.items():
+        _persist_artifact(job_id, name, data,
+                          "text/csv" if name.endswith(".csv") else "application/json")
+
+    receipt = original.result.get("run_receipt", {})
+    receipt["needs_review_count"] = original.result["needs_review_count"]
+    receipt["updated_at"] = datetime.now(timezone.utc).isoformat()
+    receipt["merged_retries"] = [*receipt.get("merged_retries", []),
+                                 {"line_id": line_id, "replacement_job_id": replacement.id}]
+    receipt_lines = []
+    for line in lines:
+        audio = _artifact_bytes(job_id, line["file"])
+        receipt_lines.append({
+            "line_id": line["id"], "character": line["character"], "voice": line["voice"],
+            "approved": line["approved"], "needs_review": line["needs_review"],
+            "best_available": line.get("best_available", False),
+            "selected_take": line["selected_take"], "critic_score": int(line["qa"].get("score", 0)),
+            "attempts": line["attempts"], "output_file": line["file"],
+            "sha256": hashlib.sha256(audio).hexdigest(),
+        })
+    receipt["lines"] = receipt_lines
+    original.result["run_receipt"] = receipt
+    manifest = {key: value for key, value in original.result.items()
+                if key not in {"package_url", "package_name", "cloud_url", "run_receipt"}}
+    manifest["autonomous_run_receipt"] = "run_receipt.json"
+    manifest_bytes = json.dumps(manifest, ensure_ascii=False, indent=2).encode()
+    receipt_bytes = json.dumps(receipt, ensure_ascii=False, indent=2).encode()
+    _persist_artifact(job_id, "manifest.json", manifest_bytes, "application/json")
+    _persist_artifact(job_id, "run_receipt.json", receipt_bytes, "application/json")
+
+    package_name = original.result["package_name"]
+    package_path = ARTIFACT_ROOT / job_id / package_name
+    with zipfile.ZipFile(package_path, "w", zipfile.ZIP_DEFLATED) as package:
+        for line in lines:
+            package.writestr(line["file"], _artifact_bytes(job_id, line["file"]))
+        package.writestr("manifest.json", manifest_bytes)
+        package.writestr("run_receipt.json", receipt_bytes)
+        for name, data in exports.items():
+            package.writestr(name, data)
+    state_store.save_artifact(job_id, package_name, package_path.read_bytes(), "application/zip")
+    original.updated_at = datetime.now(timezone.utc).isoformat()
+    original.events.append(JobEvent(
+        agent="Package Merge Agent",
+        message=f"Line {line_id} retry merged into the original package; manifests and hashes rebuilt.",
+        status="passed",
+    ))
+    state_store.save_job(original)
+    return original
 
 
 @app.get("/api/jobs/{job_id}/files/{filename}")
@@ -903,6 +1119,18 @@ def get_package(job_id: str) -> Response:
             raise HTTPException(404, "Completed package not found")
         return Response(content=data, media_type="application/zip",
                         headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/api/jobs/{job_id}/exports/{filename}")
+def get_export(job_id: str, filename: str) -> Response:
+    job = engine.get(job_id)
+    allowed = {item.get("file") for item in ((job.result or {}).get("export_presets", []) if job else [])}
+    if filename not in allowed:
+        raise HTTPException(404, "Export preset not found")
+    data = _artifact_bytes(job_id, filename)
+    media_type = "text/csv; charset=utf-8" if filename.endswith(".csv") else "application/json"
+    return Response(content=data, media_type=media_type,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")

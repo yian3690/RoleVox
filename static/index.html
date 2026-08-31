@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/editable-metadata.css">
   <link rel="stylesheet" href="/character-preview.css">
   <link rel="stylesheet" href="/typography-scale.css">
+  <link rel="stylesheet" href="/production-readiness.css">
 </head>
 <body>
   <div class="grain"></div>
@@ -141,7 +142,9 @@
 
             <section id="dialogueGenerationPanel" class="project-dialogue-panel">
               <div class="dialogue-panel-heading"><div><span class="kicker">PROJECT DIALOGUE SCRIPT</span><h3>Build the conversation in context</h3>
-                <p>The AI infers who is being addressed from surrounding lines. You can also specify the addressee manually for precise control.</p></div><strong id="projectDialogueCount">0 LINES</strong></div>
+                <p>The AI infers who is being addressed from surrounding lines. You can also specify the addressee manually for precise control.</p></div>
+                <div class="dialogue-heading-actions"><strong id="projectDialogueCount">0 LINES</strong><button id="importScriptButton" type="button">IMPORT SCRIPT</button>
+                  <input id="scriptImportFile" type="file" accept=".csv,.json,.xlsx,.ink,.yarn,.txt" hidden></div></div>
               <form id="projectDialogueForm">
                 <label>SPEAKER<select id="dialogueSpeaker" required></select></label>
                 <label>SPEAKING TO<select id="dialogueAddressee"><option value="">AI · INFER FROM CONTEXT</option></select></label>
@@ -186,6 +189,13 @@
             <p id="productionError" class="error" hidden></p>
           </section>
 
+          <section class="panel run-history-panel">
+            <div class="section-heading compact"><div><span class="kicker">PROJECT RUN HISTORY</span><h2>Background productions</h2></div>
+              <button id="refreshRunHistory" type="button">REFRESH</button></div>
+            <p class="section-copy">Close the browser and return later. Durable Cloud Tasks runs, review status, and packages remain attached to this project.</p>
+            <div id="projectRunHistory" class="project-run-history"><div class="empty-dialogue">NO PRODUCTION RUNS YET</div></div>
+          </section>
+
           <section id="runPanel" class="panel run-panel" hidden>
             <div class="section-heading compact">
               <div><span class="kicker">LIVE AGENT RUN</span><h2 id="runStage">Queued</h2></div>
@@ -207,6 +217,8 @@
       </div>
       <div id="summaryGrid" class="summary-grid"></div>
       <section id="runReceipt" class="run-receipt"></section>
+      <section id="consistencyDashboard" class="consistency-dashboard"></section>
+      <section id="exportPresets" class="export-presets"></section>
       <div id="assetList" class="asset-list"></div>
     </section>
   </main>
@@ -257,6 +269,14 @@
       <button id="saveProjectDetails" class="secondary-action" type="submit"><span>SAVE PROJECT DETAILS</span><b>✓</b></button>
       <p id="projectDetailsError" class="error" hidden></p>
     </form>
+  </dialog>
+  <dialog id="productionPreflightDialog" class="production-preflight-dialog">
+    <button id="closeProductionPreflight" class="dialog-close" type="button" aria-label="Close">×</button>
+    <span class="kicker">PRODUCTION PREFLIGHT</span><h2>Review the autonomous run</h2>
+    <p>No audio is generated until you confirm these bounded production settings.</p>
+    <div id="productionPreflightSummary" class="production-preflight-summary"></div>
+    <div class="preflight-note">Actual billed usage depends on Google Cloud pricing and successful model calls. RoleVox never exceeds the displayed line and take limits.</div>
+    <div class="preflight-actions"><button id="cancelProductionPreflight" type="button">CANCEL</button><button id="confirmProductionPreflight" type="button">CONFIRM &amp; START</button></div>
   </dialog>
 
   <footer><span>ROLEVOX · GAME CHARACTER VOICE SYSTEM</span><span>GEMINI 3.5 + VERTEX AI + GOOGLE ADK</span></footer>

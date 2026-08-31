@@ -9,6 +9,9 @@ let editingDialogue = null;
 let pendingDeleteCharacterId = null;
 let voiceEvents = [];
 let voicePackDraft = [];
+let projectRuns = [];
+let pendingMerge = null;
+let preflightPayload = null;
 const imagePreviews = new Map();
 
 async function api(url, options = {}) {
@@ -221,10 +224,50 @@ async function activateProject(projectId) {
     $('#studio').hidden = false;
     $('#results').hidden = true;
     renderProject();
+    loadProjectRuns();
   } catch (err) {
     $('#projectList').innerHTML = `<div class="project-list-empty">${escapeHtml(err.message)}</div>`;
   }
 }
+
+async function loadProjectRuns() {
+  if (!project) return;
+  try {
+    projectRuns = await api(`/api/projects/${project.id}/jobs`);
+    renderProjectRuns();
+  } catch (err) {
+    $('#projectRunHistory').innerHTML = `<div class="empty-dialogue">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderProjectRuns() {
+  const target = $('#projectRunHistory');
+  if (!projectRuns.length) {
+    target.innerHTML = '<div class="empty-dialogue">NO PRODUCTION RUNS YET</div>';
+    return;
+  }
+  const labels = {single: 'SINGLE', dialogue: 'DIALOGUE', voice_pack: 'VOICE PACK'};
+  target.innerHTML = projectRuns.map((run) => `<article class="project-run ${escapeHtml(run.status)}">
+    <div><span>${new Date(run.created_at).toLocaleString()}</span><strong>${labels[run.workflow_mode] || 'PRODUCTION'} · ${escapeHtml(run.production_mode || '—').toUpperCase()}</strong>
+      <small>${escapeHtml(run.stage)} · ${run.line_count || 0} lines${run.needs_review_count ? ` · ${run.needs_review_count} need review` : ''}</small></div>
+    <b>${escapeHtml(run.status).toUpperCase()} ${run.status === 'running' || run.status === 'queued' ? `${run.progress}%` : ''}</b>
+    <div class="project-run-actions"><button type="button" data-open-run="${run.id}">${run.status === 'completed' ? 'OPEN RESULTS' : run.status === 'failed' ? 'VIEW ERROR' : 'RESUME LIVE VIEW'}</button>
+      ${run.package_url ? `<a href="${run.package_url}">DOWNLOAD ZIP</a>` : ''}</div></article>`).join('');
+  target.querySelectorAll('[data-open-run]').forEach((button) => button.addEventListener('click', async () => {
+    currentJob = await api(`/api/jobs/${button.dataset.openRun}`);
+    $('#runPanel').hidden = false;
+    renderJob(currentJob);
+    if (currentJob.status === 'completed') renderResults(currentJob.result);
+    else if (currentJob.status === 'queued' || currentJob.status === 'running') poll(currentJob.id);
+    else {
+      $('#productionError').textContent = currentJob.error || 'This run failed.';
+      $('#productionError').hidden = false;
+      $('#runPanel').scrollIntoView({behavior: 'smooth'});
+    }
+  }));
+}
+
+$('#refreshRunHistory').addEventListener('click', loadProjectRuns);
 
 function showNewProject() {
   project = null;
@@ -439,6 +482,29 @@ function renderDialogueComposer() {
 
 $('#dialogueSpeaker').addEventListener('change', () => updateAddresseeOptions());
 $('#cancelDialogueEdit').addEventListener('click', resetDialogueEditor);
+$('#importScriptButton').addEventListener('click', () => $('#scriptImportFile').click());
+$('#scriptImportFile').addEventListener('change', async () => {
+  const file = $('#scriptImportFile').files[0];
+  if (!file) return;
+  const button = $('#importScriptButton');
+  const error = $('#projectDialogueError');
+  button.disabled = true;
+  button.textContent = 'IMPORTING…';
+  error.hidden = true;
+  try {
+    const form = new FormData();
+    form.append('file', file);
+    project = await api(`/api/projects/${project.id}/dialogues/import`, {method: 'POST', body: form});
+    renderProject();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  } finally {
+    $('#scriptImportFile').value = '';
+    button.disabled = false;
+    button.textContent = 'IMPORT SCRIPT';
+  }
+});
 $('#projectDialogueForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const error = $('#projectDialogueError');
@@ -500,6 +566,10 @@ function openCharacter(characterId) {
   const character = project.characters.find((item) => item.id === characterId);
   if (!character) return;
   const cast = character.casting;
+  const confidence = cast.confidence_breakdown || {
+    image_evidence: Number(cast.confidence || 0), brief_alignment: Number(cast.confidence || 0),
+    scene_alignment: Number(cast.confidence || 0)
+  };
   const identity = cast.voice_identity || {};
   const candidates = Array.isArray(cast.voice_candidates) ? cast.voice_candidates : [];
   const selectedVoice = cast.selected_voice;
@@ -530,8 +600,12 @@ function openCharacter(characterId) {
           <div><dt>Suggested voice</dt><dd>${escapeHtml(cast.suggested_register)}</dd></div>
           <div><dt>Delivery style</dt><dd>${escapeHtml(cast.delivery_style)}</dd></div>
           <div><dt>Voice texture</dt><dd>${escapeHtml(cast.voice_texture)}</dd></div>
-          <div><dt>Confidence</dt><dd>${Number(cast.confidence || 0)}%</dd></div>
+          <div><dt>Image evidence</dt><dd>${Number(confidence.image_evidence || 0)}%</dd></div>
+          <div><dt>Brief alignment</dt><dd>${Number(confidence.brief_alignment || 0)}%</dd></div>
+          <div><dt>Scene alignment</dt><dd>${Number(confidence.scene_alignment || 0)}%</dd></div>
+          <div class="casting-confidence"><dt>Visual Casting Confidence ⓘ</dt><dd>${Number(cast.confidence || 0)}%</dd></div>
         </dl>
+        <p class="confidence-note">Measures how consistently the image, Character Brief, and scene support this casting direction. It is not an audio-quality or statistical-accuracy score.</p>
       </section>
       <section class="voice-identity">
         <div class="recast-control"><label><span>VOICE PRESENTATION</span><select id="workspaceVoicePresentation" ${character.voice_locked ? 'disabled' : ''}>
@@ -888,30 +962,56 @@ document.querySelectorAll('input[name="targetLanguage"]').forEach((input) => inp
   $('#voicePackError').hidden = false;
 }));
 
-$('#produceBtn').addEventListener('click', async () => {
+function buildProductionPayload() {
+  const workflowMode = document.querySelector('input[name="generationMode"]:checked').value;
+  return {
+    target_language: document.querySelector('input[name="targetLanguage"]:checked').value,
+    production_mode: document.querySelector('input[name="productionMode"]:checked').value,
+    workflow_mode: workflowMode,
+    revision_limit: Number($('#revisionLimit').value),
+    single_character_id: workflowMode === 'single' ? $('#productionCharacter').value : null,
+    single_emotion: workflowMode === 'single' ? $('#singleVoiceEmotion').value.trim() : null,
+    single_text: workflowMode === 'single' ? $('#singleDialogueText').value.trim() : null,
+    pack_character_id: workflowMode === 'voice_pack' ? $('#voicePackCharacter').value : null,
+    pack_lines: workflowMode === 'voice_pack' ? voicePackDraft.map((line) => ({
+      event: line.event, event_label: line.event_label, variant: line.variant,
+      emotion: line.emotion.trim(), text: line.text.trim()
+    })) : []
+  };
+}
+
+function showProductionPreflight(payload) {
+  const lineCount = payload.workflow_mode === 'single' ? 1
+    : payload.workflow_mode === 'voice_pack' ? payload.pack_lines.length : orderedProjectDialogues().length;
+  const maxTakes = lineCount * (payload.revision_limit + 1);
+  const characterCount = payload.workflow_mode === 'dialogue'
+    ? new Set(orderedProjectDialogues().map((line) => line.characterId)).size : 1;
+  const language = {zh: 'Traditional Chinese', ja: 'Japanese', en: 'English'}[payload.target_language];
+  const mode = {single: 'Single Character', dialogue: 'Dialogue', voice_pack: 'Character Voice Pack'}[payload.workflow_mode];
+  $('#productionPreflightSummary').innerHTML = `
+    <div><span>WORKFLOW</span><strong>${mode}</strong></div>
+    <div><span>CHARACTERS</span><strong>${characterCount}</strong></div>
+    <div><span>LINES</span><strong>${lineCount} / 24</strong></div>
+    <div><span>OUTPUT</span><strong>${language}</strong></div>
+    <div><span>QUALITY TARGET</span><strong>${payload.production_mode.toUpperCase()}</strong></div>
+    <div><span>TAKE LIMIT</span><strong>${lineCount}–${maxTakes}</strong></div>
+    <div><span>TTS CALL BOUND</span><strong>${lineCount}–${maxTakes * 3}</strong></div>
+    <div><span>FILE NAMING</span><strong>character_event_01.wav</strong></div>`;
+  preflightPayload = payload;
+  $('#productionPreflightDialog').showModal();
+}
+
+async function startProduction(payload) {
   const button = $('#produceBtn');
   const error = $('#productionError');
   error.hidden = true;
   button.disabled = true;
   try {
-    const workflowMode = document.querySelector('input[name="generationMode"]:checked').value;
     currentJob = await api(`/api/projects/${project.id}/produce`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        target_language: document.querySelector('input[name="targetLanguage"]:checked').value,
-        production_mode: document.querySelector('input[name="productionMode"]:checked').value,
-        workflow_mode: workflowMode,
-        revision_limit: Number($('#revisionLimit').value),
-        single_character_id: workflowMode === 'single' ? $('#productionCharacter').value : null,
-        single_emotion: workflowMode === 'single' ? $('#singleVoiceEmotion').value.trim() : null,
-        single_text: workflowMode === 'single' ? $('#singleDialogueText').value.trim() : null,
-        pack_character_id: workflowMode === 'voice_pack' ? $('#voicePackCharacter').value : null,
-        pack_lines: workflowMode === 'voice_pack' ? voicePackDraft.map((line) => ({
-          event: line.event, event_label: line.event_label, variant: line.variant,
-          emotion: line.emotion.trim(), text: line.text.trim()
-        })) : []
-      })
+      body: JSON.stringify(payload)
     });
+    loadProjectRuns();
     $('#runPanel').hidden = false;
     $('#results').hidden = true;
     renderJob(currentJob);
@@ -922,6 +1022,16 @@ $('#produceBtn').addEventListener('click', async () => {
     error.hidden = false;
     updateReadiness();
   }
+}
+
+$('#produceBtn').addEventListener('click', () => showProductionPreflight(buildProductionPayload()));
+['closeProductionPreflight', 'cancelProductionPreflight'].forEach((id) =>
+  $(`#${id}`).addEventListener('click', () => $('#productionPreflightDialog').close()));
+$('#confirmProductionPreflight').addEventListener('click', () => {
+  const payload = preflightPayload;
+  preflightPayload = null;
+  $('#productionPreflightDialog').close();
+  if (payload) startProduction(payload);
 });
 
 async function poll(jobId, retryCount = 0) {
@@ -930,7 +1040,15 @@ async function poll(jobId, retryCount = 0) {
     $('#productionError').hidden = true;
     renderJob(currentJob);
     if (currentJob.status === 'completed') {
+      if (pendingMerge && pendingMerge.replacementJobId === jobId) {
+        currentJob = await api(`/api/jobs/${pendingMerge.originalJobId}/lines/${pendingMerge.originalLineId}/merge-retry`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({replacement_job_id: jobId})
+        });
+        pendingMerge = null;
+      }
       renderResults(currentJob.result);
+      loadProjectRuns();
       updateReadiness();
       return;
     }
@@ -946,6 +1064,8 @@ async function poll(jobId, retryCount = 0) {
     }
     $('#productionError').textContent = err.message;
     $('#productionError').hidden = false;
+    if (pendingMerge?.replacementJobId === jobId) pendingMerge = null;
+    loadProjectRuns();
     updateReadiness();
   }
 }
@@ -1011,6 +1131,24 @@ function renderResults(result) {
       <div><dt>VOICE POLICY</dt><dd>SYNTHETIC ONLY · NO CLONING</dd></div>
     </dl>
     <p>Receipt, agent trace, critic decisions, selected takes, and SHA-256 hashes are included in the game package.</p>` : '';
+  const consistency = result.voice_consistency || {};
+  const cm = consistency.metrics || {};
+  $('#consistencyDashboard').innerHTML = consistency.overall != null ? `
+    <div class="result-feature-heading"><div><span>VOICE CONSISTENCY DASHBOARD</span><h3>Locked identity across this run</h3></div><strong>${consistency.overall}%</strong></div>
+    <div class="consistency-metrics">
+      <div><span>IDENTITY</span><b>${cm.character_consistency ?? 0}</b></div>
+      <div><span>PRONUNCIATION</span><b>${cm.pronunciation ?? 0}</b></div>
+      <div><span>EMOTION MATCH</span><b>${cm.emotion_match ?? 0}</b></div>
+      <div><span>SCENE FIT</span><b>${cm.scene_fit ?? 0}</b></div>
+    </div>
+    <div class="consistency-characters">${(consistency.characters || []).map((item) =>
+      `<span><b>${escapeHtml(item.character)}</b> · ${item.score}% · ${item.line_count} line${item.line_count === 1 ? '' : 's'} · ${item.status.toUpperCase()}</span>`).join('')}</div>
+    <p>${escapeHtml(consistency.measurement_note || '')}</p>` : '';
+  $('#exportPresets').innerHTML = (result.export_presets || []).length ? `
+    <div class="result-feature-heading"><div><span>GAME-ENGINE EXPORT PRESETS</span><h3>Metadata ready for implementation</h3></div></div>
+    <div class="export-links">${result.export_presets.map((item) =>
+      `<a href="/api/jobs/${currentJob.id}/exports/${encodeURIComponent(item.file)}"><b>${escapeHtml(item.engine)}</b><span>${escapeHtml(item.file)}</span><i>↓</i></a>`).join('')}</div>
+    <p>All presets and final WAV assets are also included in the game package ZIP.</p>` : '';
   $('#downloadBtn').href = result.package_url;
   $('#assetList').innerHTML = result.lines.map((line) => {
     const takes = line.takes.map((take, index) => `<div class="take-sequence">
@@ -1053,6 +1191,7 @@ function renderResults(result) {
       button.disabled = true;
       button.textContent = 'QUEUING RETRY…';
       try {
+        const originalJobId = currentJob.id;
         currentJob = await api(`/api/projects/${project.id}/produce`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
@@ -1065,6 +1204,11 @@ function renderResults(result) {
             single_text: line.text
           })
         });
+        pendingMerge = {
+          originalJobId,
+          originalLineId: Number(line.id),
+          replacementJobId: currentJob.id
+        };
         $('#runPanel').hidden = false;
         $('#results').hidden = true;
         renderJob(currentJob);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import io
 import json
@@ -153,6 +154,66 @@ def _slug(value: str, fallback: str = "asset") -> str:
     return value[:48] or fallback
 
 
+def build_consistency_dashboard(lines: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize the multimodal critic's identity-consistency judgements."""
+    metrics = ("character_consistency", "pronunciation", "emotion_match", "scene_fit")
+    averages = {
+        key: round(sum(float(line.get("qa", {}).get(key, 0)) for line in lines) / max(1, len(lines)))
+        for key in metrics
+    }
+    characters: dict[str, list[float]] = {}
+    for line in lines:
+        characters.setdefault(str(line.get("character", "Unknown")), []).append(
+            float(line.get("qa", {}).get("character_consistency", 0))
+        )
+    per_character = [
+        {"character": name, "line_count": len(scores), "score": round(sum(scores) / len(scores)),
+         "status": "stable" if sum(scores) / len(scores) >= 86 else "review"}
+        for name, scores in characters.items()
+    ]
+    return {
+        "overall": averages["character_consistency"], "metrics": averages,
+        "review_flags": sum(1 for line in lines if line.get("needs_review")),
+        "characters": per_character,
+        "measurement_note": (
+            "Critic-derived identity consistency across generated takes; "
+            "this is an explainable QA score, not a biometric or acoustic measurement."
+        ),
+    }
+
+
+def build_export_presets(project: str, scene: str, language: str,
+                         lines: list[dict[str, Any]]) -> dict[str, bytes]:
+    """Build engine-friendly metadata while keeping WAV files as portable assets."""
+    rows = [{
+        "id": str(line.get("id", "")), "character": line.get("character", ""),
+        "subtitle": line.get("text", ""), "source_text": line.get("source_text", ""),
+        "emotion": line.get("emotion", ""), "voice": line.get("voice", ""),
+        "audio_file": line.get("file", ""), "event": line.get("voice_event", ""),
+        "variant": line.get("voice_variant", ""), "language": language,
+    } for line in lines]
+    csv_buffer = io.StringIO()
+    writer = csv.DictWriter(csv_buffer, fieldnames=list(rows[0].keys()) if rows else ["id"])
+    writer.writeheader(); writer.writerows(rows)
+    unity = {"schema": "rolevox.unity.v1", "project": project, "scene": scene,
+             "clips": [{"key": row["id"], "audio": f"Assets/RoleVox/Audio/{row['audio_file']}",
+                        "subtitle": row["subtitle"], "character": row["character"],
+                        "emotion": row["emotion"]} for row in rows]}
+    godot = {"schema": "rolevox.godot.v1", "project": project, "scene": scene,
+             "resources": [{"key": row["id"], "stream": f"res://rolevox/audio/{row['audio_file']}",
+                            "text": row["subtitle"], "speaker": row["character"],
+                            "emotion": row["emotion"]} for row in rows]}
+    unreal = {"schema": "rolevox.unreal.datatable.v1", "project": project, "scene": scene,
+              "rows": {row["id"]: {"Character": row["character"], "Subtitle": row["subtitle"],
+                       "Emotion": row["emotion"], "SoundWave": row["audio_file"]} for row in rows}}
+    return {
+        "generic_dialogue_manifest.csv": csv_buffer.getvalue().encode("utf-8-sig"),
+        "unity_rolevox_manifest.json": json.dumps(unity, ensure_ascii=False, indent=2).encode(),
+        "godot_rolevox_manifest.json": json.dumps(godot, ensure_ascii=False, indent=2).encode(),
+        "unreal_rolevox_datatable.json": json.dumps(unreal, ensure_ascii=False, indent=2).encode(),
+    }
+
+
 def _extract_json(text: str) -> Any:
     text = text.strip()
     if text.startswith("```"):
@@ -188,8 +249,10 @@ class WorkflowEngine:
         self.jobs: dict[str, JobRecord] = {}
         self._lock = threading.Lock()
 
-    def create(self, job_id: str, request: ProjectRequest) -> JobRecord:
-        job = JobRecord(id=job_id, title=request.title, demo_mode=DEMO_MODE)
+    def create(self, job_id: str, request: ProjectRequest,
+               project_id: str | None = None) -> JobRecord:
+        job = JobRecord(id=job_id, title=request.title, project_id=project_id,
+                        workflow_mode=request.workflow_mode, demo_mode=DEMO_MODE)
         with self._lock:
             self.jobs[job_id] = job
         state_store.save_job(job)
@@ -333,6 +396,8 @@ Dialogue: {json.dumps(lines, ensure_ascii=False)}"""
                              "delivery_style": "Measured · calm",
                              "voice_texture": "Slightly breathy" if i % 2 else "Clear",
                              "confidence": 87,
+                             "confidence_breakdown": {"image_evidence": 88, "brief_alignment": 90,
+                                                      "scene_alignment": 84},
                              "visual_analysis": "Image silhouette, costume, posture and brief were combined for casting.",
                               "voice_candidates": candidates, "selected_voice": None,
                               "voice_presentation": resolved_presentations[name],
@@ -361,6 +426,9 @@ and creator-provided reference text exactly; do not translate or rewrite those i
 Return a JSON array. Every item must contain character, profile, emotion_baseline,
 perceived_archetype, visual_tone, suggested_register, delivery_style, voice_texture,
 confidence (integer 0-100), visual_analysis, rationale, and voice_candidates. voice_candidates
+Every item must also contain confidence_breakdown with integer keys image_evidence,
+brief_alignment, and scene_alignment. These are explainability indicators for how strongly
+each input supports the casting direction, not statistical accuracy or audio-quality scores.
 must contain exactly three objects; every object must contain voice, label, qualities, pitch,
 texture, speaking_style, accent, profile, and rationale. Use three different allowlisted voices.
 Explicitly explain which visible cues influenced the result in visual_analysis. Profiles must
@@ -424,6 +492,12 @@ Scene direction: {json.dumps(direction, ensure_ascii=False)}"""
                                    "rationale": "Fallback synthetic audition option matched to the character profile"})
             voice = candidates[0]["voice"]
             identity = candidates[0]
+            raw_breakdown = item.get("confidence_breakdown", {})
+            confidence_breakdown = {
+                key: min(100, max(0, int(raw_breakdown.get(key, item.get("confidence", 75)))))
+                for key in ("image_evidence", "brief_alignment", "scene_alignment")
+            }
+            casting_confidence = round(sum(confidence_breakdown.values()) / 3)
             cast.append({"character": name, "voice": voice,
                          "profile": identity["profile"],
                          "emotion_baseline": item.get("emotion_baseline", "scene-aware"),
@@ -432,7 +506,8 @@ Scene direction: {json.dumps(direction, ensure_ascii=False)}"""
                          "suggested_register": item.get("suggested_register", "Mid register"),
                          "delivery_style": item.get("delivery_style", "Measured"),
                          "voice_texture": item.get("voice_texture", VOICE_LIBRARY[voice]),
-                         "confidence": min(100, max(0, int(item.get("confidence", 75)))),
+                         "confidence": casting_confidence,
+                         "confidence_breakdown": confidence_breakdown,
                          "visual_analysis": item.get("visual_analysis", "No image-specific cues supplied"),
                          "voice_candidates": candidates, "selected_voice": None,
                          "voice_presentation": resolved_presentations[name],
@@ -1000,6 +1075,16 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
             }
             receipt_path = job_dir / "run_receipt.json"
             receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
+            consistency = build_consistency_dashboard(results)
+            export_files = build_export_presets(request.title, request.scene, request.target_language, results)
+            for export_name, export_data in export_files.items():
+                (job_dir / export_name).write_bytes(export_data)
+            export_presets = [
+                {"engine": "Generic", "file": "generic_dialogue_manifest.csv"},
+                {"engine": "Unity", "file": "unity_rolevox_manifest.json"},
+                {"engine": "Godot", "file": "godot_rolevox_manifest.json"},
+                {"engine": "Unreal", "file": "unreal_rolevox_datatable.json"},
+            ]
             manifest = {"project": request.title, "scene": request.scene,
                         "background": request.background,
                         "target_language": request.target_language,
@@ -1021,7 +1106,9 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                              "source_filename": character_images.get(name, {}).get("filename")}
                             for name in characters
                         ],
-                        "direction": direction, "casting": casting, "lines": results}
+                        "direction": direction, "casting": casting,
+                        "voice_consistency": consistency,
+                        "export_presets": export_presets, "lines": results}
             (job_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
             zip_name = f"{_slug(request.title, 'game')}_{_slug(request.scene, 'scene')}_voice_assets.zip"
@@ -1032,6 +1119,8 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                     package.write(path, path.name)
                 package.write(job_dir / "manifest.json", "manifest.json")
                 package.write(receipt_path, "run_receipt.json")
+                for export_name in export_files:
+                    package.write(job_dir / export_name, export_name)
 
             cloud_url = self._upload_optional(job_dir, zip_path)
             with self._lock:
@@ -1064,8 +1153,9 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
         from google.cloud import storage
         bucket = storage.Client().bucket(bucket_name)
         prefix = f"rolevox/{job_dir.name}"
-        for path in [*job_dir.glob("*.wav"), job_dir / "manifest.json",
-                     job_dir / "run_receipt.json", zip_path]:
+        for path in [*job_dir.glob("*.wav"), *job_dir.glob("*.csv"),
+                     *job_dir.glob("*_manifest.json"), *job_dir.glob("*_datatable.json"),
+                     job_dir / "manifest.json", job_dir / "run_receipt.json", zip_path]:
             bucket.blob(f"{prefix}/{path.name}").upload_from_filename(path)
         return f"gs://{bucket_name}/{prefix}/{zip_path.name}"
 
