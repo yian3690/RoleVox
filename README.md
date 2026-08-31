@@ -2,7 +2,7 @@
 
 **An autonomous, voice-locked game dialogue production studio built with Gemini 3.5, Google ADK, and Google Cloud.**
 
-[Live demo](https://rolevox-919890071642.asia-east1.run.app) · [Detailed cloud architecture](docs/ARCHITECTURE.md)
+[Detailed cloud architecture](docs/ARCHITECTURE.md)
 
 RoleVox turns character art, creative briefs, world context, and multilingual scripts into directed, translated, quality-reviewed, game-ready voice assets. It is built for independent game teams that need more than raw text-to-speech: RoleVox makes production decisions, listens to its own output, revises weak takes, preserves character identity across scenes, and packages the result for implementation.
 
@@ -54,24 +54,7 @@ The browser can be closed while Cloud Tasks continues the job. Project Run Histo
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[Creator / Game Team] -->|HTTPS| CR[Cloud Run · FastAPI + Web UI]
-    CR --> FS[(Firestore<br/>projects · voice locks · jobs · traces)]
-    CR -->|enqueue bounded job| CT[Cloud Tasks<br/>durable background worker]
-    CT -->|OIDC| W[Cloud Run worker]
-    W --> ADK[Google ADK<br/>Production Director]
-    ADK --> G35[Gemini 3.5 Flash<br/>direction · translation · casting · critique]
-    W --> TTS[Gemini 3.1 Flash TTS<br/>synthetic speech]
-    TTS --> VC[Voice Critic<br/>multimodal audio QA]
-    VC -->|below target| REV[Bounded revision]
-    REV --> TTS
-    VC -->|approved / best available| PKG[Audio QA + Packager]
-    PKG --> GCS[(Private Cloud Storage<br/>WAV · JSON · CSV · ZIP)]
-    PKG --> FS
-    IN[Private GCS inbox/*.json] --> EA[Eventarc]
-    EA -->|OIDC| CR
-```
+![RoleVox agentic voice production architecture](docs/rolevox-architecture-diagram.png)
 
 The studio returns a job ID immediately. Cloud Tasks invokes an OIDC-protected worker and keeps the request alive until production finishes. The UI polls the Firestore-backed job and renders a human-readable agent event trace.
 
@@ -176,7 +159,7 @@ project_scene_voice_assets.zip
 
 ## Quick judge walkthrough
 
-Open the [hosted RoleVox studio](https://rolevox-919890071642.asia-east1.run.app), then:
+With RoleVox running locally:
 
 1. Open an existing project or create a world.
 2. Add an original fictional character image and brief.
