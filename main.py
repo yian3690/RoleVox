@@ -5,12 +5,15 @@ import os
 import re
 import threading
 import shutil
+import traceback
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
+from google.auth.transport import requests as google_auth_requests
+from google.oauth2 import id_token
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
@@ -19,12 +22,16 @@ from starlette.concurrency import run_in_threadpool
 load_dotenv()
 
 from app.models import (  # noqa: E402
-    CharacterRecord, CharacterRecastCreate, CharacterUpdate, DialogueCreate, DialogueRecord, JobRecord, ProductionCreate,
+    CharacterRecord, CharacterRecastCreate, CharacterUpdate, DialogueCreate, DialogueRecord, InboxManifest,
+    JobEvent, JobRecord, ProductionCreate,
     ProjectCreate, ProjectRecord, ProjectRequest, ProjectUpdate, VoicePreviewCreate,
     VoiceSelectionCreate,
 )
+from app import state_store  # noqa: E402
+from app import task_queue  # noqa: E402
 from app.pipeline import (  # noqa: E402
-    ARTIFACT_ROOT, CLOUD_LOCATION, DEMO_MODE, TEXT_MODEL, TTS_MODEL, VOICE_LIBRARY, engine,
+    ARTIFACT_ROOT, CLOUD_LOCATION, DEMO_MODE, TEXT_MODEL, TTS_MODEL,
+    USE_ADK_ORCHESTRATION, VOICE_LIBRARY, engine,
 )
 
 app = FastAPI(title="RoleVox", version="0.2.0")
@@ -34,6 +41,7 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 PROJECTS: dict[str, ProjectRecord] = {}
 PROJECT_IMAGES: dict[tuple[str, str], dict] = {}
 PROJECT_LOCK = threading.RLock()
+INBOX_EVENT_JOBS: dict[str, str] = {}
 PROJECT_ROOT = ARTIFACT_ROOT / "projects"
 PRODUCTION_TARGETS = {"draft": 72, "production": 86, "cinematic": 92}
 
@@ -43,7 +51,10 @@ def health() -> dict:
     return {"status": "ok", "mode": engine.backend_name(),
             "configured": engine.is_configured(), "location": CLOUD_LOCATION,
             "text_model": TEXT_MODEL, "tts_model": TTS_MODEL,
-            "gcs": bool(os.getenv("GCS_BUCKET"))}
+            "gcs": bool(os.getenv("GCS_BUCKET")),
+            "persistence": "firestore" if state_store.enabled() else "local",
+            "orchestrator": "google-adk" if USE_ADK_ORCHESTRATION else "native",
+            "worker": "cloud-tasks" if task_queue.enabled() else "background"}
 
 
 @app.get("/api/voices")
@@ -53,6 +64,10 @@ def voices() -> dict:
 
 def _project_or_404(project_id: str) -> ProjectRecord:
     project = PROJECTS.get(project_id)
+    if not project:
+        project = state_store.get_project(project_id)
+        if project:
+            PROJECTS[project.id] = project
     if not project:
         raise HTTPException(404, "Project not found")
     return project
@@ -73,6 +88,7 @@ def _save_project(project: ProjectRecord) -> None:
     folder = PROJECT_ROOT / project.id
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "project.json").write_text(project.model_dump_json(indent=2), encoding="utf-8")
+    state_store.save_project(project)
 
 
 def _ensure_voice_candidates(character: CharacterRecord) -> None:
@@ -96,22 +112,45 @@ def _ensure_voice_candidates(character: CharacterRecord) -> None:
 
 
 def _load_projects() -> None:
-    if not PROJECT_ROOT.exists():
-        return
-    for path in PROJECT_ROOT.glob("*/project.json"):
-        try:
-            project = ProjectRecord.model_validate_json(path.read_text(encoding="utf-8"))
+    if PROJECT_ROOT.exists():
+        for path in PROJECT_ROOT.glob("*/project.json"):
+            try:
+                project = ProjectRecord.model_validate_json(path.read_text(encoding="utf-8"))
+                PROJECTS[project.id] = project
+                for character in project.characters:
+                    _ensure_voice_candidates(character)
+                    image_path = path.parent / "characters" / character.image_storage_name
+                    if image_path.is_file():
+                        PROJECT_IMAGES[(project.id, character.id)] = {
+                            "data": image_path.read_bytes(), "mime_type": character.image_mime_type,
+                            "filename": character.image_filename,
+                        }
+            except (OSError, ValueError):
+                continue
+    try:
+        for project in state_store.load_projects():
             PROJECTS[project.id] = project
             for character in project.characters:
                 _ensure_voice_candidates(character)
-                image_path = path.parent / "characters" / character.image_storage_name
-                if image_path.is_file():
-                    PROJECT_IMAGES[(project.id, character.id)] = {
-                        "data": image_path.read_bytes(), "mime_type": character.image_mime_type,
-                        "filename": character.image_filename,
-                    }
-        except (OSError, ValueError):
-            continue
+    except Exception:
+        traceback.print_exc()
+
+
+def _image_reference(project: ProjectRecord, character: CharacterRecord) -> dict | None:
+    key = (project.id, character.id)
+    reference = PROJECT_IMAGES.get(key)
+    if reference:
+        return reference
+    data = state_store.load_character_image(project.id, character.image_storage_name)
+    if data is None:
+        return None
+    reference = {
+        "data": data,
+        "mime_type": character.image_mime_type,
+        "filename": character.image_filename,
+    }
+    PROJECT_IMAGES[key] = reference
+    return reference
 
 
 _load_projects()
@@ -220,6 +259,7 @@ def delete_project(project_id: str) -> Response:
         PROJECTS.pop(project.id, None)
         for key in [key for key in PROJECT_IMAGES if key[0] == project.id]:
             PROJECT_IMAGES.pop(key, None)
+        state_store.archive_project(project.id)
     return Response(status_code=204)
 
 
@@ -227,7 +267,7 @@ def delete_project(project_id: str) -> Response:
 def get_character_image(project_id: str, character_id: str) -> Response:
     project = _project_or_404(project_id)
     character = _character_or_404(project, character_id)
-    reference = PROJECT_IMAGES.get((project.id, character.id))
+    reference = _image_reference(project, character)
     if not reference:
         raise HTTPException(404, "Character image not found")
     return Response(content=reference["data"], media_type=reference["mime_type"])
@@ -282,6 +322,9 @@ async def add_character(
         image_folder = PROJECT_ROOT / project.id / "characters"
         image_folder.mkdir(parents=True, exist_ok=True)
         (image_folder / storage_name).write_bytes(data)
+        state_store.save_character_image(
+            project.id, character.id, storage_name, data, image.content_type,
+        )
         _touch(project)
         _save_project(project)
     return project
@@ -296,7 +339,7 @@ async def recast_character_voice(project_id: str, character_id: str,
     character = _character_or_404(project, character_id)
     if character.voice_locked:
         raise HTTPException(409, "Unlock this Voice Identity before generating new audition voices.")
-    reference = PROJECT_IMAGES.get((project.id, character.id))
+    reference = _image_reference(project, character)
     if not reference:
         raise HTTPException(404, "Character image not found")
     casting = await run_in_threadpool(
@@ -435,9 +478,10 @@ def delete_dialogue(project_id: str, character_id: str, dialogue_id: str) -> Pro
     return project
 
 
-@app.post("/api/projects/{project_id}/produce", response_model=JobRecord, status_code=202)
-def produce_project(project_id: str, payload: ProductionCreate,
-                    tasks: BackgroundTasks) -> JobRecord:
+def _prepare_project_production(
+    project_id: str, payload: ProductionCreate, *, job_id: str | None = None,
+    run_origin: str = "studio",
+) -> tuple[JobRecord, ProjectRequest, dict[str, dict]]:
     if not engine.is_configured():
         raise HTTPException(503, "Vertex AI is not configured.")
     project = _project_or_404(project_id)
@@ -493,23 +537,191 @@ def produce_project(project_id: str, payload: ProductionCreate,
         workflow_mode=payload.workflow_mode,
         line_emotions=line_emotions, line_addressees=line_addressees,
         locked_casting=[item.casting for item in selected_characters],
+        run_origin=run_origin,
     )
     character_images = {
-        item.name: PROJECT_IMAGES[(project.id, item.id)]
-        for item in selected_characters if (project.id, item.id) in PROJECT_IMAGES
+        item.name: reference
+        for item in selected_characters
+        if (reference := _image_reference(project, item)) is not None
     }
-    job = engine.create(uuid.uuid4().hex[:12], request)
-    tasks.add_task(engine.run, job, request, character_images)
+    job = engine.create(job_id or uuid.uuid4().hex[:12], request)
+    return job, request, character_images
+
+
+@app.post("/api/projects/{project_id}/produce", response_model=JobRecord, status_code=202)
+def produce_project(project_id: str, payload: ProductionCreate,
+                    tasks: BackgroundTasks) -> JobRecord:
+    job, request, character_images = _prepare_project_production(project_id, payload)
+    if task_queue.enabled():
+        queue_name = task_queue.enqueue(job.id, request, project_id)
+        job.events.append(JobEvent(
+            agent="Cloud Tasks Dispatcher", message=f"Queued durable worker task: {queue_name}",
+            status="info",
+        ))
+        state_store.save_job(job)
+    else:
+        tasks.add_task(engine.run, job, request, character_images)
     return job
+
+
+def _verify_google_caller(authorization: str | None, expected_account: str,
+                          expected_audience: str | list[str], purpose: str) -> dict:
+    has_audience = any(expected_audience) if isinstance(expected_audience, list) else bool(expected_audience)
+    if not expected_account or not has_audience:
+        raise HTTPException(503, f"RoleVox {purpose} authentication is not configured.")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "A Google OIDC bearer token is required.")
+    try:
+        claims = id_token.verify_oauth2_token(
+            authorization.removeprefix("Bearer ").strip(),
+            google_auth_requests.Request(),
+            audience=expected_audience,
+        )
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(401, "Invalid Google OIDC bearer token.") from exc
+    if claims.get("email") != expected_account or claims.get("email_verified") is not True:
+        raise HTTPException(403, f"OIDC identity is not authorized for the RoleVox {purpose}.")
+    return claims
+
+
+def _verify_inbox_caller(authorization: str | None) -> dict:
+    expected_account = os.getenv("EVENTARC_SERVICE_ACCOUNT", "").strip()
+    expected_audience = os.getenv("ROLEVOX_EVENT_AUDIENCE", "").strip()
+    public_url = os.getenv("ROLEVOX_PUBLIC_URL", "").strip().rstrip("/")
+    audiences = [expected_audience]
+    if public_url and public_url != expected_audience:
+        audiences.extend([public_url, f"{public_url}/api/inbox/events"])
+    audiences.append(f"{expected_audience.rstrip('/')}/api/inbox/events")
+    return _verify_google_caller(authorization, expected_account, audiences, "inbox")
+
+
+def _verify_task_caller(authorization: str | None) -> dict:
+    expected_account = os.getenv("CLOUD_TASKS_SERVICE_ACCOUNT", "").strip()
+    expected_audience = os.getenv("ROLEVOX_EVENT_AUDIENCE", "").strip()
+    return _verify_google_caller(
+        authorization, expected_account, expected_audience, "production worker",
+    )
+
+
+def _load_inbox_manifest(bucket_name: str, object_name: str,
+                         generation: str | None) -> InboxManifest:
+    from google.cloud import storage
+
+    blob_generation = int(generation) if generation and generation.isdigit() else None
+    raw = storage.Client().bucket(bucket_name).blob(
+        object_name, generation=blob_generation,
+    ).download_as_bytes()
+    try:
+        return InboxManifest.model_validate_json(raw)
+    except ValidationError as exc:
+        raise HTTPException(422, f"Invalid RoleVox inbox manifest: {exc}") from exc
+
+
+@app.post("/api/inbox/events")
+def receive_inbox_event(
+    event: dict, authorization: str | None = Header(default=None),
+) -> dict:
+    """Process one authenticated Cloud Storage finalized event synchronously."""
+
+    _verify_inbox_caller(authorization)
+    data = event.get("data") if isinstance(event.get("data"), dict) else event
+    bucket_name = str(data.get("bucket", "")).strip()
+    object_name = str(data.get("name", "")).strip()
+    generation = str(data.get("generation", "")).strip() or None
+    configured_bucket = os.getenv("GCS_BUCKET", "").strip()
+    if not configured_bucket:
+        raise HTTPException(503, "RoleVox inbox requires GCS_BUCKET.")
+    if bucket_name != configured_bucket:
+        raise HTTPException(403, "Storage event bucket is not authorized for RoleVox.")
+    if not object_name.startswith("inbox/") or not object_name.lower().endswith(".json"):
+        return {"status": "ignored", "reason": "Object is outside the RoleVox inbox."}
+
+    event_key = f"{bucket_name}/{object_name}#{generation or 'latest'}"
+    existing_job_id = INBOX_EVENT_JOBS.get(event_key)
+    existing_job = engine.get(existing_job_id) if existing_job_id else None
+    if existing_job and existing_job.status == "completed":
+        return {"status": "duplicate", "job_id": existing_job.id,
+                "cloud_url": (existing_job.result or {}).get("cloud_url")}
+
+    manifest = _load_inbox_manifest(bucket_name, object_name, generation)
+    production = ProductionCreate(
+        target_language=manifest.target_language,
+        production_mode=manifest.production_mode,
+        workflow_mode="dialogue",
+        revision_limit=manifest.revision_limit,
+        character_id=manifest.character_id,
+    )
+    job_id = uuid.uuid5(uuid.NAMESPACE_URL, event_key).hex[:12]
+    claimed, persisted_job_id = state_store.claim_inbox_event(event_key, job_id)
+    if not claimed:
+        persisted_job = engine.get(persisted_job_id) if persisted_job_id else None
+        if persisted_job and persisted_job.status == "completed":
+            return {"status": "duplicate", "job_id": persisted_job.id,
+                    "cloud_url": (persisted_job.result or {}).get("cloud_url")}
+        return {"status": "processing", "job_id": persisted_job_id or job_id}
+    job, request, character_images = _prepare_project_production(
+        manifest.project_id, production, job_id=job_id, run_origin="eventarc-inbox",
+    )
+    job.events.append(JobEvent(
+        agent="Auto Production Inbox",
+        message=f"Accepted Cloud Storage event for gs://{bucket_name}/{object_name}",
+        status="info",
+    ))
+    INBOX_EVENT_JOBS[event_key] = job.id
+    engine.run(job, request, character_images)
+    if job.status != "completed":
+        INBOX_EVENT_JOBS.pop(event_key, None)
+        state_store.release_inbox_event(event_key)
+        raise HTTPException(503, f"Inbox production failed: {job.error or 'unknown error'}")
+    state_store.complete_inbox_event(event_key, job.id)
+    return {"status": "completed", "job_id": job.id,
+            "cloud_url": (job.result or {}).get("cloud_url")}
 
 
 @app.post("/api/jobs", response_model=JobRecord, status_code=202)
 def create_job(payload: ProjectRequest, tasks: BackgroundTasks) -> JobRecord:
     if not engine.is_configured():
         raise HTTPException(503, "Configure Vertex AI/ADC or GEMINI_API_KEY, or explicitly enable DEMO_MODE=true.")
+    payload.run_origin = "api"
     job = engine.create(uuid.uuid4().hex[:12], payload)
-    tasks.add_task(engine.run, job, payload)
+    if task_queue.enabled():
+        queue_name = task_queue.enqueue(job.id, payload)
+        job.events.append(JobEvent(
+            agent="Cloud Tasks Dispatcher", message=f"Queued durable worker task: {queue_name}",
+            status="info",
+        ))
+        state_store.save_job(job)
+    else:
+        tasks.add_task(engine.run, job, payload)
     return job
+
+
+@app.post("/api/jobs/{job_id}/execute")
+def execute_job(job_id: str, payload: dict,
+                authorization: str | None = Header(default=None)) -> dict:
+    """Authenticated Cloud Tasks target that keeps CPU allocated until production ends."""
+
+    _verify_task_caller(authorization)
+    job = engine.get(job_id)
+    if not job:
+        raise HTTPException(404, "Queued job not found")
+    if job.status == "completed":
+        return {"status": "duplicate", "job_id": job.id}
+    try:
+        request = ProjectRequest.model_validate(payload.get("request"))
+    except ValidationError as exc:
+        raise HTTPException(422, f"Invalid queued production request: {exc}") from exc
+    character_images: dict[str, dict] = {}
+    project_id = payload.get("project_id")
+    if project_id:
+        project = _project_or_404(str(project_id))
+        for character in project.characters:
+            if character.name in request.character_descriptions:
+                reference = _image_reference(project, character)
+                if reference:
+                    character_images[character.name] = reference
+    engine.run(job, request, character_images)
+    return {"status": job.status, "job_id": job.id, "error": job.error}
 
 
 def _script_characters(script: str) -> list[str]:
@@ -561,7 +773,12 @@ async def create_job_with_references(
         }
 
     job = engine.create(uuid.uuid4().hex[:12], request)
-    tasks.add_task(engine.run, job, request, character_images)
+    if task_queue.enabled():
+        # This compatibility endpoint carries raw image bytes, so keep the request open
+        # until they have been consumed rather than placing them in a task payload.
+        engine.run(job, request, character_images)
+    else:
+        tasks.add_task(engine.run, job, request, character_images)
     return job
 
 
@@ -582,17 +799,40 @@ def _safe_file(job_id: str, filename: str) -> Path:
 
 
 @app.get("/api/jobs/{job_id}/files/{filename}")
-def get_audio(job_id: str, filename: str) -> FileResponse:
-    return FileResponse(_safe_file(job_id, filename), media_type="audio/wav", filename=filename)
+def get_audio(job_id: str, filename: str) -> Response:
+    try:
+        return FileResponse(_safe_file(job_id, filename), media_type="audio/wav", filename=filename)
+    except HTTPException:
+        job = engine.get(job_id)
+        allowed = {
+            take.get("file")
+            for line in ((job.result or {}).get("lines", []) if job else [])
+            for take in [line, *line.get("takes", [])]
+        }
+        if filename not in allowed:
+            raise HTTPException(404, "File not found")
+        data = state_store.load_artifact(job_id, filename)
+        if data is None:
+            raise HTTPException(404, "File not found")
+        return Response(content=data, media_type="audio/wav",
+                        headers={"Content-Disposition": f'inline; filename="{filename}"'})
 
 
 @app.get("/api/jobs/{job_id}/package")
-def get_package(job_id: str) -> FileResponse:
+def get_package(job_id: str) -> Response:
     job = engine.get(job_id)
     if not job or job.status != "completed" or not job.result:
         raise HTTPException(404, "Completed package not found")
-    path = _safe_file(job_id, job.result["package_name"])
-    return FileResponse(path, media_type="application/zip", filename=path.name)
+    filename = job.result["package_name"]
+    try:
+        path = _safe_file(job_id, filename)
+        return FileResponse(path, media_type="application/zip", filename=path.name)
+    except HTTPException:
+        data = state_store.load_artifact(job_id, filename)
+        if data is None:
+            raise HTTPException(404, "Completed package not found")
+        return Response(content=data, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 app.mount("/", StaticFiles(directory=STATIC, html=True), name="static")

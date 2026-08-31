@@ -45,19 +45,20 @@ flowchart LR
     I -. optional .-> J[Cloud Storage]
 ```
 
-The web request returns immediately with a job ID. FastAPI runs the production in
-the background while the browser polls structured job events. Director, Casting,
-and Dialogue are also declared as a Google ADK `SequentialAgent` in
-`app/adk_agent.py`, with a standard discovery entrypoint in `rolevox_agent/`.
+The web request returns immediately with a Firestore-backed job ID. Cloud Tasks then
+invokes an OIDC-protected synchronous Cloud Run worker, while the browser polls the
+structured event trace. The production Director stage runs through a real Google ADK
+`InMemoryRunner`; the resulting ADK trace is stored in the manifest and Autonomous Run Receipt.
 
 ## Tech stack
 
 - Gemini 3.5 Flash: visual-reference casting, direction, line analysis, and multimodal voice critique
 - Gemini 3.1 Flash TTS Preview: controllable multilingual speech
-- Google Agent Development Kit: inspectable multi-agent sequential workflow
+- Google Agent Development Kit: production Director runtime and inspectable workflow
 - FastAPI + vanilla web UI: asynchronous production dashboard
-- Google Cloud Run: hosted application and background workflow execution
-- Google Cloud Storage (optional): generated WAV and ZIP asset delivery
+- Google Cloud Run + Cloud Tasks: hosted application and durable, throttled production workers
+- Firestore: project, Voice Lock, job, event trace, result, and inbox-idempotency state
+- Eventarc + private Cloud Storage: autonomous inbox trigger and generated asset delivery
 
 ## Run locally
 
@@ -125,10 +126,10 @@ RoleVox extracts unique character names from the script. Each character card acc
 one PNG, JPEG, or WebP image up to 5 MB and a creator brief up to 1,000 characters.
 Gemini evaluates fictional design cues such as archetype, expression, posture, costume,
 visual energy, and scene mood, then selects a prebuilt voice and emotion baseline.
-Images remain in memory for the active job and are not placed in the downloadable ZIP.
-Project records, uploaded references, locked identities, and dialogue libraries are
-also stored under `artifacts/projects/<project-id>` so a local service restart does
-not silently recast a character.
+Images are not placed in the downloadable ZIP. Local projects use
+`artifacts/projects/<project-id>`; the deployed service stores project records and locked
+identities in Firestore and references in private Cloud Storage, so a cold start does not
+silently recast a character.
 
 ## Project workflow
 
@@ -159,17 +160,12 @@ gcloud run deploy rolevox --source . --region asia-east1 --allow-unauthenticated
   --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=true,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID,GOOGLE_CLOUD_LOCATION=global
 ```
 
-Grant the Cloud Run runtime service account `roles/aiplatform.user`. Cloud Run then
-uses its service account automatically; no API key is stored in the application.
-
-For a stronger production setup, store the API key in Secret Manager rather than
-the command line. If you provide `GCS_BUCKET`, RoleVox uploads WAVs, the manifest,
-and the final ZIP under `rolevox/<job-id>/`. The Cloud Run service still serves a
-local download for the live demo.
-
-Cloud Run containers have ephemeral local storage and in-memory job state. This is
-appropriate for the hackathon MVP. The next production step is moving job state to
-Firestore and dispatching work through Cloud Tasks so jobs survive instance restarts.
+The deployed version uses Application Default Credentials and a dedicated runtime
+service account; no AI Studio API key is stored. Firestore persists jobs and projects,
+Cloud Tasks dispatches production, Eventarc watches the private `inbox/` prefix, and GCS
+stores WAVs, `manifest.json`, `run_receipt.json`, and the ZIP under `rolevox/<job-id>/`.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for exact resources, identity boundaries,
+idempotency, and Free Trial cost guardrails.
 
 ## API
 
@@ -184,6 +180,8 @@ Firestore and dispatching work through Cloud Tasks so jobs survive instance rest
 - `POST /api/projects/{id}/produce` — produce one selected character or the full cast
 - `POST /api/jobs` — validate and enqueue a production
 - `POST /api/jobs/with-references` — enqueue multipart production with mapped character images
+- `POST /api/inbox/events` — OIDC-protected Eventarc storage target
+- `POST /api/jobs/{id}/execute` — OIDC-protected Cloud Tasks worker target
 - `GET /api/jobs/{id}` — progress, agent event trace, and result
 - `GET /api/jobs/{id}/files/{name}` — generated WAV
 - `GET /api/jobs/{id}/package` — game asset ZIP
@@ -194,5 +192,6 @@ Firestore and dispatching work through Cloud Tasks so jobs survive instance rest
 - Casting Agent is constrained to an explicit allowlist of prebuilt voices
 - Prompts prohibit real-person imitation and describe characters fictionally
 - Visual analysis is limited to fictional performance cues and prohibits identity or sensitive-trait inference
-- Generated manifests record the voice, model, QA score, and retry count
+- Generated manifests and Autonomous Run Receipts record the voice, model, QA score,
+  retry count, event trace, selected take, and SHA-256 hash
 - Projects should disclose AI-generated audio to players and follow platform rules

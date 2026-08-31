@@ -1,6 +1,8 @@
 import os
+import io
 import json
 import base64
+import zipfile
 from types import SimpleNamespace
 import pytest
 
@@ -10,8 +12,10 @@ from fastapi.testclient import TestClient
 
 from main import app
 import main as main_module
+from app.models import InboxManifest, JobRecord, ProjectRequest
 from app.pipeline import FEMININE_VOICES, MASCULINE_VOICES, WorkflowEngine
 import app.pipeline as pipeline_module
+import app.adk_agent as adk_agent_module
 
 
 client = TestClient(app)
@@ -22,11 +26,113 @@ def isolated_project_store(monkeypatch, tmp_path):
     monkeypatch.setattr(main_module, "PROJECTS", {})
     monkeypatch.setattr(main_module, "PROJECT_IMAGES", {})
     monkeypatch.setattr(main_module, "PROJECT_ROOT", tmp_path / "projects")
+    monkeypatch.setattr(main_module, "INBOX_EVENT_JOBS", {})
+
+
+def test_inbox_rejects_missing_oidc_token(monkeypatch):
+    monkeypatch.setenv("EVENTARC_SERVICE_ACCOUNT", "rolevox-eventarc@example.iam.gserviceaccount.com")
+    monkeypatch.setenv("ROLEVOX_EVENT_AUDIENCE", "https://rolevox.example")
+    response = client.post("/api/inbox/events", json={"data": {
+        "bucket": "rolevox-test-bucket", "name": "inbox/scene.json", "generation": "1",
+    }})
+    assert response.status_code == 401
+
+
+def test_inbox_accepts_only_explicit_cloud_run_audiences(monkeypatch):
+    account = "rolevox-eventarc@example.iam.gserviceaccount.com"
+    canonical = "https://rolevox-canonical.a.run.app"
+    public = "https://rolevox-project.asia-east1.run.app"
+    monkeypatch.setenv("EVENTARC_SERVICE_ACCOUNT", account)
+    monkeypatch.setenv("ROLEVOX_EVENT_AUDIENCE", canonical)
+    monkeypatch.setenv("ROLEVOX_PUBLIC_URL", public)
+    captured = {}
+
+    def verify(token, request, audience):
+        captured["audience"] = audience
+        return {"email": account, "email_verified": True}
+
+    monkeypatch.setattr(main_module.id_token, "verify_oauth2_token", verify)
+    main_module._verify_inbox_caller("Bearer signed-token")
+    assert set(captured["audience"]) == {
+        canonical, f"{canonical}/api/inbox/events",
+        public, f"{public}/api/inbox/events",
+    }
+
+
+def test_generation_cards_and_transient_poll_retry_are_present():
+    html = main_module.STATIC.joinpath("index.html").read_text(encoding="utf-8")
+    css = main_module.STATIC.joinpath("receipt.css").read_text(encoding="utf-8")
+    script = main_module.STATIC.joinpath("app.js").read_text(encoding="utf-8")
+    assert 'class="mode-picker generation-mode-picker"' in html
+    assert ".generation-mode-picker" in css
+    assert "[429, 503].includes(err.status)" in script
+    assert "Production worker is busy. Retrying automatically" in script
+
+
+def test_inbox_ignores_output_objects(monkeypatch):
+    monkeypatch.setattr(main_module, "_verify_inbox_caller", lambda *_: {"email_verified": True})
+    monkeypatch.setenv("GCS_BUCKET", "rolevox-test-bucket")
+    response = client.post("/api/inbox/events", json={"data": {
+        "bucket": "rolevox-test-bucket", "name": "rolevox/job/output.zip", "generation": "1",
+    }})
+    assert response.status_code == 200
+    assert response.json()["status"] == "ignored"
+
+
+def test_inbox_runs_once_per_storage_generation(monkeypatch):
+    monkeypatch.setattr(main_module, "_verify_inbox_caller", lambda *_: {"email_verified": True})
+    monkeypatch.setenv("GCS_BUCKET", "rolevox-test-bucket")
+    manifest = InboxManifest(project_id="project-1", target_language="ja")
+    monkeypatch.setattr(main_module, "_load_inbox_manifest", lambda *_: manifest)
+    request = ProjectRequest(
+        title="Inbox Test", scene="Gate", target_language="ja", script="Ari: Ready.",
+    )
+    job = JobRecord(id="inboxjob001", title=request.title, demo_mode=True)
+    monkeypatch.setattr(
+        main_module, "_prepare_project_production", lambda *_, **__: (job, request, {}),
+    )
+
+    def fake_run(target_job, *_):
+        target_job.status = "completed"
+        target_job.progress = 100
+        target_job.stage = "Ready"
+        target_job.result = {"cloud_url": "gs://rolevox-test-bucket/rolevox/inboxjob001/package.zip"}
+
+    monkeypatch.setattr(main_module.engine, "run", fake_run)
+    monkeypatch.setattr(main_module.engine, "get", lambda job_id: job if job_id == job.id else None)
+    event = {"data": {"bucket": "rolevox-test-bucket", "name": "inbox/scene.json", "generation": "7"}}
+    first = client.post("/api/inbox/events", json=event)
+    second = client.post("/api/inbox/events", json=event)
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "completed"
+    assert second.json() == {
+        "status": "duplicate", "job_id": job.id,
+        "cloud_url": "gs://rolevox-test-bucket/rolevox/inboxjob001/package.zip",
+    }
 
 
 def test_health_and_voices():
     assert client.get("/api/health").json()["status"] == "ok"
     assert len(client.get("/api/voices").json()["voices"]) == 30
+
+
+def test_production_director_uses_real_adk_boundary(monkeypatch):
+    monkeypatch.setattr(pipeline_module, "DEMO_MODE", False)
+    monkeypatch.setattr(pipeline_module, "USE_ADK_ORCHESTRATION", True)
+    monkeypatch.setattr(
+        adk_agent_module,
+        "run_director",
+        lambda prompt: ({"genre": "fantasy", "setting": "gate"}, ["ProductionDirectorAgent"]),
+    )
+    request = ProjectRequest(
+        title="ADK Test", scene="Gate", target_language="en", script="Ari: Ready.",
+    )
+    direction = WorkflowEngine()._director(
+        None, request, [{"id": 1, "character": "Ari", "text": "Ready."}],
+    )
+    assert direction["_orchestrator"] == "google-adk"
+    assert direction["_adk_trace"] == ["ProductionDirectorAgent"]
 
 
 @pytest.mark.parametrize("target_language", ["zh", "en", "ja"])
@@ -51,6 +157,14 @@ def test_demo_job_completes_and_packages_assets(target_language):
     package = client.get(job["result"]["package_url"])
     assert package.status_code == 200
     assert package.headers["content-type"] == "application/zip"
+    receipt = job["result"]["run_receipt"]
+    assert receipt["receipt_type"] == "RoleVox Autonomous Run Receipt"
+    assert receipt["origin"] == "api"
+    assert receipt["voice_policy"]["synthetic_system_voices_only"] is True
+    assert len(receipt["lines"][0]["sha256"]) == 64
+    with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
+        assert "manifest.json" in archive.namelist()
+        assert "run_receipt.json" in archive.namelist()
 
 
 def test_character_image_and_brief_flow_into_casting_manifest():

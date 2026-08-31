@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
 import json
 import math
@@ -19,6 +20,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
+from . import state_store
 from .models import JobEvent, JobRecord, ProjectRequest
 
 
@@ -52,6 +54,7 @@ ARTIFACT_ROOT = Path(os.getenv("ARTIFACT_ROOT", "artifacts")).resolve()
 TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", "gemini-3.5-flash")
 TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-3.1-flash-tts-preview")
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() in {"1", "true", "yes"}
+USE_ADK_ORCHESTRATION = os.getenv("USE_ADK_ORCHESTRATION", "false").lower() in {"1", "true", "yes"}
 CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
 CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "global").strip() or "global"
 USE_VERTEX_AI = (
@@ -110,10 +113,17 @@ class WorkflowEngine:
         job = JobRecord(id=job_id, title=request.title, demo_mode=DEMO_MODE)
         with self._lock:
             self.jobs[job_id] = job
+        state_store.save_job(job)
         return job
 
     def get(self, job_id: str) -> JobRecord | None:
-        return self.jobs.get(job_id)
+        job = self.jobs.get(job_id)
+        if job is None:
+            job = state_store.get_job(job_id)
+            if job is not None:
+                with self._lock:
+                    self.jobs[job_id] = job
+        return job
 
     def _update(self, job: JobRecord, stage: str, progress: int, agent: str, message: str,
                 status: str = "running") -> None:
@@ -123,6 +133,7 @@ class WorkflowEngine:
             job.progress = progress
             job.updated_at = _utcnow()
             job.events.append(JobEvent(agent=agent, message=message, status=status))
+        state_store.save_job(job)
 
     @staticmethod
     def is_configured() -> bool:
@@ -175,12 +186,20 @@ class WorkflowEngine:
             return {"genre": "cinematic adventure", "setting": request.scene,
                     "stakes": "The characters must make a consequential choice.",
                     "emotional_arc": "tension to resolve", "language_policy": "preserve each line"}
-        return self._json_call(client, f"""You are Director Agent for a game voice-production pipeline.
+        prompt = f"""You are Director Agent for a game voice-production pipeline.
 Analyze the scene and return ONE JSON object with keys: genre, setting, stakes,
 emotional_arc, performance_notes, pronunciation_risks. Preserve Chinese, English,
 and Japanese text. Never imitate or reference a real performer.
 Project: {request.title}\nScene: {request.scene}\nWorld and scene background: {request.background}
-Dialogue: {json.dumps(lines, ensure_ascii=False)}""")
+Dialogue: {json.dumps(lines, ensure_ascii=False)}"""
+        if USE_ADK_ORCHESTRATION:
+            from .adk_agent import run_director
+
+            direction, trace = run_director(prompt)
+            direction["_orchestrator"] = "google-adk"
+            direction["_adk_trace"] = trace
+            return direction
+        return self._json_call(client, prompt)
 
     @staticmethod
     def _resolved_voice_presentation(description: str, requested: str) -> str:
@@ -628,7 +647,9 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
 
             self._update(job, "Direction", 8, "Director Agent", "Analyzing story, scene and emotional arc")
             direction = self._director(client, request, lines)
-            self._update(job, "Translation", 16, "Director Agent", "Scene direction locked", "passed")
+            orchestrator = direction.get("_orchestrator", "native")
+            self._update(job, "Translation", 16, "Director Agent",
+                         f"Scene direction locked via {orchestrator}", "passed")
 
             self._update(job, "Translation", 20, "Translation Agent",
                          f"Localizing {len(lines)} line(s) into {LANGUAGES[request.target_language]}")
@@ -713,6 +734,49 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                                 "approved": int(best[1].get("score", 0)) >= request.quality_threshold,
                                 "takes": takes})
 
+            completed_at = _utcnow()
+            orchestrator = direction.get("_orchestrator", "native")
+            line_receipts = []
+            for result in results:
+                output_path = job_dir / result["file"]
+                line_receipts.append({
+                    "line_id": result["id"], "character": result["character"],
+                    "voice": result["voice"], "approved": result["approved"],
+                    "selected_take": result["selected_take"],
+                    "critic_score": int(result["qa"].get("score", 0)),
+                    "attempts": result["attempts"], "output_file": result["file"],
+                    "sha256": hashlib.sha256(output_path.read_bytes()).hexdigest(),
+                })
+            receipt = {
+                "schema_version": "1.0",
+                "receipt_type": "RoleVox Autonomous Run Receipt",
+                "run_id": job.id, "origin": request.run_origin,
+                "created_at": job.created_at, "completed_at": completed_at,
+                "orchestrator": orchestrator,
+                "durable_worker": "cloud-tasks" if os.getenv("CLOUD_TASKS_QUEUE") else "local-background",
+                "agents": [event.model_dump(mode="json") for event in job.events],
+                "human_constraints": {
+                    "target_language": request.target_language,
+                    "production_mode": request.production_mode,
+                    "quality_threshold": request.quality_threshold,
+                    "revision_limit": request.max_retries,
+                },
+                "autonomous_actions": [
+                    "scene_direction", "translation", "visual_or_locked_casting",
+                    "performance_planning", "voice_generation", "multimodal_voice_critique",
+                    "bounded_auto_revision", "audio_packaging",
+                ],
+                "voice_policy": {
+                    "synthetic_system_voices_only": True, "voice_cloning": False,
+                    "all_selected_voices_locked": all(
+                        bool(cast.get("voice_identity", {}).get("locked")) for cast in casting
+                    ),
+                },
+                "models": {"analysis_and_critic": TEXT_MODEL, "tts": TTS_MODEL},
+                "lines": line_receipts,
+            }
+            receipt_path = job_dir / "run_receipt.json"
+            receipt_path.write_text(json.dumps(receipt, ensure_ascii=False, indent=2), encoding="utf-8")
             manifest = {"project": request.title, "scene": request.scene,
                         "background": request.background,
                         "target_language": request.target_language,
@@ -722,6 +786,9 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                         "production_target": request.quality_threshold,
                         "agent_revision_limit": request.max_retries,
                         "backend": self.backend_name(),
+                        "orchestrator": orchestrator,
+                        "run_origin": request.run_origin,
+                        "autonomous_run_receipt": "run_receipt.json",
                         "models": {"analysis_and_critic": TEXT_MODEL, "tts": TTS_MODEL},
                         "character_references": [
                             {"character": name,
@@ -740,19 +807,23 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
                     path = job_dir / result["file"]
                     package.write(path, path.name)
                 package.write(job_dir / "manifest.json", "manifest.json")
+                package.write(receipt_path, "run_receipt.json")
 
             cloud_url = self._upload_optional(job_dir, zip_path)
             with self._lock:
                 job.status = "completed"; job.progress = 100; job.stage = "Ready"
                 job.updated_at = _utcnow()
                 job.result = {**manifest, "package_url": f"/api/jobs/{job.id}/package",
-                              "package_name": zip_name, "cloud_url": cloud_url}
+                              "package_name": zip_name, "cloud_url": cloud_url,
+                              "run_receipt": receipt}
                 job.events.append(JobEvent(agent="Audio QA", message="Manifest and game asset package ready", status="passed"))
+            state_store.save_job(job)
         except Exception as exc:
             with self._lock:
                 job.status = "failed"; job.stage = "Failed"; job.updated_at = _utcnow()
                 job.error = str(exc)
                 job.events.append(JobEvent(agent="System", message=str(exc), status="failed"))
+            state_store.save_job(job)
             traceback.print_exc()
 
     @staticmethod
@@ -763,7 +834,8 @@ pace={line['pace']}; fictional voice profile={cast['profile']}.
         from google.cloud import storage
         bucket = storage.Client().bucket(bucket_name)
         prefix = f"rolevox/{job_dir.name}"
-        for path in [*job_dir.glob("*.wav"), job_dir / "manifest.json", zip_path]:
+        for path in [*job_dir.glob("*.wav"), job_dir / "manifest.json",
+                     job_dir / "run_receipt.json", zip_path]:
             bucket.blob(f"{prefix}/{path.name}").upload_from_filename(path)
         return f"gs://{bucket_name}/{prefix}/{zip_path.name}"
 

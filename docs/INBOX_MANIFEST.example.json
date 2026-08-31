@@ -1,0 +1,8 @@
+{
+  "schema_version": "1.0",
+  "project_id": "YOUR_ROLEVOX_PROJECT_ID",
+  "target_language": "ja",
+  "production_mode": "production",
+  "revision_limit": 2,
+  "character_id": null
+}

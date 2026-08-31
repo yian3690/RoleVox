@@ -20,6 +20,7 @@ class ProjectRequest(BaseModel):
     line_emotions: dict[int, str] = Field(default_factory=dict)
     line_addressees: dict[int, str] = Field(default_factory=dict)
     locked_casting: list[dict[str, Any]] = Field(default_factory=list)
+    run_origin: Literal["studio", "api", "eventarc-inbox"] = "api"
 
     @field_validator("script")
     @classmethod
@@ -121,6 +122,17 @@ class ProductionCreate(BaseModel):
     single_character_id: str | None = Field(default=None, max_length=40)
     single_emotion: str | None = Field(default=None, max_length=80)
     single_text: str | None = Field(default=None, max_length=4_000)
+
+
+class InboxManifest(BaseModel):
+    """A bounded production request uploaded to the private GCS inbox."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    project_id: str = Field(min_length=1, max_length=80)
+    target_language: Literal["zh", "en", "ja"]
+    production_mode: Literal["draft", "production", "cinematic"] = "production"
+    revision_limit: int = Field(default=2, ge=0, le=3)
+    character_id: str | None = Field(default=None, max_length=40)
 
 
 class JobEvent(BaseModel):

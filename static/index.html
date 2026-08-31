@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;600&family=Noto+Sans+TC:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/receipt.css">
   <link rel="stylesheet" href="/project-library.css">
   <link rel="stylesheet" href="/rolevox-enhancements.css">
   <link rel="stylesheet" href="/dialogue-composer.css">
@@ -114,7 +115,7 @@
               <span id="readiness" class="readiness">WAITING FOR CAST</span>
             </div>
 
-            <fieldset class="generation-mode-picker">
+            <fieldset class="mode-picker generation-mode-picker">
               <legend>GENERATION TYPE</legend>
               <label><input type="radio" name="generationMode" value="single"><span><b>Single Character</b><small>One-off line · does not change the project script</small></span><i>01</i></label>
               <label><input type="radio" name="generationMode" value="dialogue" checked><span><b>Dialogue</b><small>Context-aware multi-character script</small></span><i>02</i></label>
@@ -193,6 +194,7 @@
         <a id="downloadBtn" class="download" href="#"><span>DOWNLOAD GAME PACKAGE</span><b>↓</b></a>
       </div>
       <div id="summaryGrid" class="summary-grid"></div>
+      <section id="runReceipt" class="run-receipt"></section>
       <div id="assetList" class="asset-list"></div>
     </section>
   </main>

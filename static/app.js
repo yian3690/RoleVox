@@ -12,7 +12,11 @@ const imagePreviews = new Map();
 async function api(url, options = {}) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(data.detail || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -754,9 +758,10 @@ $('#produceBtn').addEventListener('click', async () => {
   }
 });
 
-async function poll(jobId) {
+async function poll(jobId, retryCount = 0) {
   try {
     currentJob = await api(`/api/jobs/${jobId}`);
+    $('#productionError').hidden = true;
     renderJob(currentJob);
     if (currentJob.status === 'completed') {
       renderResults(currentJob.result);
@@ -764,8 +769,15 @@ async function poll(jobId) {
       return;
     }
     if (currentJob.status === 'failed') throw new Error(currentJob.error || 'Production failed');
-    setTimeout(() => poll(jobId), 1200);
+    setTimeout(() => poll(jobId, 0), 1200);
   } catch (err) {
+    if ([429, 503].includes(err.status)) {
+      const delay = Math.min(8000, 1500 * (2 ** Math.min(retryCount, 3)));
+      $('#productionError').textContent = `Production worker is busy. Retrying automatically in ${Math.ceil(delay / 1000)} seconds…`;
+      $('#productionError').hidden = false;
+      setTimeout(() => poll(jobId, retryCount + 1), delay);
+      return;
+    }
     $('#productionError').textContent = err.message;
     $('#productionError').hidden = false;
     updateReadiness();
@@ -821,6 +833,16 @@ function renderResults(result) {
     <article><small>APPROVED LINES</small><strong>${result.lines.filter((line) => line.approved).length}/${result.lines.length}</strong></article>
     <article><small>AUTO REVISIONS</small><strong>${revisions}</strong></article>
     <article><small>AVERAGE SCORE</small><strong>${avg}</strong></article>`;
+  const receipt = result.run_receipt || {};
+  $('#runReceipt').innerHTML = receipt.run_id ? `
+    <div><span>AUTONOMOUS RUN RECEIPT</span><strong>${escapeHtml(receipt.run_id)}</strong></div>
+    <dl>
+      <div><dt>ORIGIN</dt><dd>${escapeHtml(receipt.origin || 'studio')}</dd></div>
+      <div><dt>ORCHESTRATOR</dt><dd>${escapeHtml(receipt.orchestrator || 'native')}</dd></div>
+      <div><dt>DURABLE WORKER</dt><dd>${escapeHtml(receipt.durable_worker || 'local')}</dd></div>
+      <div><dt>VOICE POLICY</dt><dd>SYNTHETIC ONLY · NO CLONING</dd></div>
+    </dl>
+    <p>Receipt, agent trace, critic decisions, selected takes, and SHA-256 hashes are included in the game package.</p>` : '';
   $('#downloadBtn').href = result.package_url;
   $('#assetList').innerHTML = result.lines.map((line) => {
     const takes = line.takes.map((take, index) => `<div class="take-sequence">
