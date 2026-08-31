@@ -30,14 +30,14 @@
 
 .run-receipt > div span {
   display: block;
-  font: 500 8px DM Mono;
+  font: 500 10px DM Mono;
   color: var(--acid);
   letter-spacing: .11em;
 }
 
 .run-receipt > div strong {
   display: block;
-  font: 600 18px DM Mono;
+  font: 600 22px DM Mono;
   margin-top: 8px;
 }
 
@@ -53,11 +53,11 @@
   padding-bottom: 7px;
 }
 
-.run-receipt dt { font: 500 7px DM Mono; color: #aaa; }
-.run-receipt dd { font: 600 9px DM Mono; margin: 4px 0 0; }
+.run-receipt dt { font: 500 9px DM Mono; color: #aaa; }
+.run-receipt dd { font: 600 12px DM Mono; margin: 5px 0 0; }
 .run-receipt p {
   grid-column: 1 / -1;
-  font: 400 9px/1.6 DM Mono;
+  font: 400 11px/1.7 DM Mono;
   color: #bbb;
   margin: 0;
 }

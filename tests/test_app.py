@@ -86,11 +86,16 @@ def test_character_workspace_readability_and_control_spacing_are_present():
     assert "#characterDialog .dialog-columns>section:first-child .detail-list dd{font-size:14px" in css
     assert ".generation-mode-picker small{font-size:12px" in css
     assert "max-width:none;font-size:11px" in css
-    assert "voice-pack-character{display:grid;grid-template-columns:max-content 300px" in css
+    assert "voice-pack-character{display:grid;grid-template-columns:max-content 250px" in css
     assert "voice-event-option select{box-sizing:border-box;width:92px" in css
     assert "textarea.pack-text{box-sizing:border-box;width:100%;height:68px" in css
     assert ".revision-grid div{display:grid;grid-template-columns:90px minmax(0,1fr)" in css
     assert ".take blockquote{box-sizing:border-box;height:132px" in css
+    assert ".voice-pack-approved{padding:14px 15px;font-size:11px" in css
+    receipt_css = main_module.STATIC.joinpath("receipt.css").read_text(encoding="utf-8")
+    assert "font: 600 22px DM Mono" in receipt_css
+    assert ".run-receipt dd { font: 600 12px DM Mono" in receipt_css
+    assert "font: 400 11px/1.7 DM Mono" in receipt_css
 
 
 def test_inbox_ignores_output_objects(monkeypatch):
