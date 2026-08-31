@@ -69,6 +69,16 @@ def test_generation_cards_and_transient_poll_retry_are_present():
     assert "Production worker is busy. Retrying automatically" in script
 
 
+def test_character_workspace_readability_and_control_spacing_are_present():
+    css = main_module.STATIC.joinpath("typography-scale.css").read_text(encoding="utf-8")
+    assert "#characterDialog .dialog-header{padding-right:58px}" in css
+    assert "#characterDialog .character-heading p{white-space:pre-line" in css
+    assert "#characterDialog .audition-heading>.block-label{font-size:11px" in css
+    assert "#characterDialog .voice-candidate p{font-size:13px" in css
+    assert "#characterDialog .reasoning-callout strong{display:block;font-size:20px" in css
+    assert "#characterDialog .dialog-columns>section:first-child .detail-list dd{font-size:14px" in css
+
+
 def test_inbox_ignores_output_objects(monkeypatch):
     monkeypatch.setattr(main_module, "_verify_inbox_caller", lambda *_: {"email_verified": True})
     monkeypatch.setenv("GCS_BUCKET", "rolevox-test-bucket")

@@ -18,6 +18,30 @@
 /* Character card status */
 .simple-lock-status{padding:9px 11px;font-size:10px;line-height:1.25}
 
+/* Character workspace: keep controls clear and preserve authored character notes. */
+#characterDialog .dialog-close{z-index:3}
+#characterDialog .dialog-header{padding-right:58px}
+#characterDialog .dialog-lock{margin-right:4px;white-space:nowrap}
+#characterDialog .character-heading p{white-space:pre-line;overflow-wrap:anywhere;line-height:1.65}
+
+/* Visual Casting Result readability. */
+#characterDialog .dialog-columns>section:first-child>.block-label{font-size:11px;line-height:1.45}
+#characterDialog .reasoning-callout{padding:18px}
+#characterDialog .reasoning-callout strong{display:block;font-size:20px;line-height:1.3}
+#characterDialog .reasoning-callout p{font-size:12px;line-height:1.7;margin:10px 0 14px}
+#characterDialog .reasoning-callout small{font-size:9px;line-height:1.45}
+#characterDialog .dialog-columns>section:first-child .detail-list dt{font-size:10px;line-height:1.45}
+#characterDialog .dialog-columns>section:first-child .detail-list dd{font-size:14px;line-height:1.5}
+
+/* Voice Casting options readability. */
+#characterDialog .audition-heading>.block-label{font-size:11px;line-height:1.45}
+#characterDialog .voice-candidate{padding:14px}
+#characterDialog .voice-candidate header span{font-size:9px;line-height:1.4}
+#characterDialog .voice-candidate header strong{font-size:14px;line-height:1.35}
+#characterDialog .voice-candidate p{font-size:13px;line-height:1.55;margin:8px 0}
+#characterDialog .voice-candidate small{font-size:10px;line-height:1.6}
+#characterDialog .candidate-actions button{height:38px;font-size:9px}
+
 /* Generation type and output language */
 .generation-mode-picker legend,.language-picker legend,.mode-picker legend{font-size:10px;line-height:1.45}
 .generation-mode-picker label{min-height:96px;padding:18px 21px}
@@ -87,4 +111,7 @@
   .event p{grid-column:1/-1}
   .line-heading h3{font-size:20px}
   .takes{grid-template-columns:1fr}
+  #characterDialog .dialog-header{padding-right:38px}
+  #characterDialog .dialog-lock{margin-right:0}
+  #characterDialog .reasoning-callout strong{font-size:18px}
 }
