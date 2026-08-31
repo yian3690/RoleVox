@@ -189,11 +189,10 @@
             <p id="productionError" class="error" hidden></p>
           </section>
 
-          <section class="panel run-history-panel">
-            <div class="section-heading compact"><div><span class="kicker">PROJECT RUN HISTORY</span><h2>Background productions</h2></div>
-              <button id="refreshRunHistory" type="button">REFRESH</button></div>
-            <p class="section-copy">Close the browser and return later. Durable Cloud Tasks runs, review status, and packages remain attached to this project.</p>
-            <div id="projectRunHistory" class="project-run-history"><div class="empty-dialogue">NO PRODUCTION RUNS YET</div></div>
+          <section class="panel run-history-launcher">
+            <div><span class="kicker">PROJECT RUN HISTORY</span><h2>Background productions</h2>
+              <p class="section-copy">Review completed, failed, or still-running productions attached to this project.</p></div>
+            <button id="viewRunHistory" type="button"><span>VIEW RUN HISTORY</span><b id="runHistoryCount">0</b></button>
           </section>
 
           <section id="runPanel" class="panel run-panel" hidden>
@@ -218,7 +217,6 @@
       <div id="summaryGrid" class="summary-grid"></div>
       <section id="runReceipt" class="run-receipt"></section>
       <section id="consistencyDashboard" class="consistency-dashboard"></section>
-      <section id="exportPresets" class="export-presets"></section>
       <div id="assetList" class="asset-list"></div>
     </section>
   </main>
@@ -277,6 +275,34 @@
     <div id="productionPreflightSummary" class="production-preflight-summary"></div>
     <div class="preflight-note">Actual billed usage depends on Google Cloud pricing and successful model calls. RoleVox never exceeds the displayed line and take limits.</div>
     <div class="preflight-actions"><button id="cancelProductionPreflight" type="button">CANCEL</button><button id="confirmProductionPreflight" type="button">CONFIRM &amp; START</button></div>
+  </dialog>
+  <dialog id="runHistoryDialog" class="run-history-dialog">
+    <button id="closeRunHistory" class="dialog-close" type="button" aria-label="Close">×</button>
+    <div class="run-history-dialog-heading"><div><span class="kicker">PROJECT RUN HISTORY</span><h2>Background productions</h2>
+      <p>Closing the browser does not stop durable Cloud Tasks. Clearing a finished record permanently deletes its cloud assets and package.</p></div>
+      <button id="refreshRunHistory" type="button">REFRESH</button></div>
+    <div id="projectRunHistory" class="project-run-history"><div class="empty-dialogue">NO PRODUCTION RUNS YET</div></div>
+  </dialog>
+  <dialog id="historyActionDialog" class="history-action-dialog">
+    <button id="closeHistoryAction" class="dialog-close" type="button" aria-label="Close">×</button>
+    <form id="historyActionForm">
+      <span id="historyActionKicker" class="kicker">RENAME HISTORY RECORD</span>
+      <h2 id="historyActionTitle">Name this production</h2>
+      <p id="historyActionCopy"></p>
+      <label id="historyRenameField">DISPLAY NAME
+        <input id="historyRecordName" maxlength="80" autocomplete="off">
+        <small>Only the history label changes. Project, ZIP, Manifest, and Receipt names stay unchanged.</small>
+      </label>
+      <div id="historyDeleteWarning" class="history-delete-warning" hidden>
+        <strong>PERMANENT CLOUD DELETION</strong>
+        <p>This removes the Job record, WAV files, ZIP package, Manifest, Receipt, and engine metadata. This action cannot be undone.</p>
+      </div>
+      <p id="historyActionError" class="error" hidden></p>
+      <div class="history-action-buttons">
+        <button id="cancelHistoryAction" type="button">CANCEL</button>
+        <button id="confirmHistoryAction" type="submit">SAVE NAME</button>
+      </div>
+    </form>
   </dialog>
 
   <footer><span>ROLEVOX · GAME CHARACTER VOICE SYSTEM</span><span>GEMINI 3.5 + VERTEX AI + GOOGLE ADK</span></footer>

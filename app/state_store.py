@@ -110,6 +110,34 @@ def list_jobs(project_id: str, limit: int = 30) -> list[JobRecord]:
     return jobs[:limit]
 
 
+def list_hidden_jobs() -> list[JobRecord]:
+    client = _firestore()
+    if client is None:
+        return []
+    jobs = []
+    for snapshot in client.collection("jobs").stream():
+        payload = snapshot.to_dict() or {}
+        if payload.get("history_hidden"):
+            jobs.append(JobRecord.model_validate(payload))
+    return jobs
+
+
+def delete_job(job_id: str) -> None:
+    client = _firestore()
+    if client is not None:
+        client.collection("jobs").document(job_id).delete()
+
+
+def delete_job_artifacts(job_id: str) -> int:
+    bucket = _bucket()
+    if bucket is None:
+        return 0
+    blobs = list(bucket.list_blobs(prefix=f"rolevox/{job_id}/"))
+    for blob in blobs:
+        blob.delete()
+    return len(blobs)
+
+
 def _bucket():
     bucket_name = os.getenv("GCS_BUCKET", "").strip()
     if not enabled() or not bucket_name:

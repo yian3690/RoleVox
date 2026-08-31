@@ -12,6 +12,7 @@ let voicePackDraft = [];
 let projectRuns = [];
 let pendingMerge = null;
 let preflightPayload = null;
+let pendingHistoryAction = null;
 const imagePreviews = new Map();
 
 async function api(url, options = {}) {
@@ -242,19 +243,23 @@ async function loadProjectRuns() {
 
 function renderProjectRuns() {
   const target = $('#projectRunHistory');
+  $('#runHistoryCount').textContent = projectRuns.length;
   if (!projectRuns.length) {
     target.innerHTML = '<div class="empty-dialogue">NO PRODUCTION RUNS YET</div>';
     return;
   }
   const labels = {single: 'SINGLE', dialogue: 'DIALOGUE', voice_pack: 'VOICE PACK'};
   target.innerHTML = projectRuns.map((run) => `<article class="project-run ${escapeHtml(run.status)}">
-    <div><span>${new Date(run.created_at).toLocaleString()}</span><strong>${labels[run.workflow_mode] || 'PRODUCTION'} · ${escapeHtml(run.production_mode || '—').toUpperCase()}</strong>
+    <div><span>${new Date(run.created_at).toLocaleString()}</span><strong>${escapeHtml(run.history_name || `${labels[run.workflow_mode] || 'PRODUCTION'} · ${String(run.production_mode || '—').toUpperCase()}`)}</strong>
       <small>${escapeHtml(run.stage)} · ${run.line_count || 0} lines${run.needs_review_count ? ` · ${run.needs_review_count} need review` : ''}</small></div>
     <b>${escapeHtml(run.status).toUpperCase()} ${run.status === 'running' || run.status === 'queued' ? `${run.progress}%` : ''}</b>
     <div class="project-run-actions"><button type="button" data-open-run="${run.id}">${run.status === 'completed' ? 'OPEN RESULTS' : run.status === 'failed' ? 'VIEW ERROR' : 'RESUME LIVE VIEW'}</button>
-      ${run.package_url ? `<a href="${run.package_url}">DOWNLOAD ZIP</a>` : ''}</div></article>`).join('');
+      ${run.package_url ? `<a href="${run.package_url}">DOWNLOAD ZIP</a>` : ''}
+      <button type="button" data-rename-run="${run.id}">RENAME</button>
+      ${run.status === 'completed' || run.status === 'failed' ? `<button type="button" class="clear-run-history" data-clear-run="${run.id}">CLEAR RECORD</button>` : ''}</div></article>`).join('');
   target.querySelectorAll('[data-open-run]').forEach((button) => button.addEventListener('click', async () => {
     currentJob = await api(`/api/jobs/${button.dataset.openRun}`);
+    $('#runHistoryDialog').close();
     $('#runPanel').hidden = false;
     renderJob(currentJob);
     if (currentJob.status === 'completed') renderResults(currentJob.result);
@@ -265,9 +270,86 @@ function renderProjectRuns() {
       $('#runPanel').scrollIntoView({behavior: 'smooth'});
     }
   }));
+  target.querySelectorAll('[data-rename-run]').forEach((button) => button.addEventListener('click', async () => {
+    const run = projectRuns.find((item) => item.id === button.dataset.renameRun);
+    openHistoryAction('rename', run);
+  }));
+  target.querySelectorAll('[data-clear-run]').forEach((button) => button.addEventListener('click', async () => {
+    const run = projectRuns.find((item) => item.id === button.dataset.clearRun);
+    openHistoryAction('delete', run);
+  }));
 }
 
+function historyDefaultName(run) {
+  const labels = {single: 'SINGLE', dialogue: 'DIALOGUE', voice_pack: 'VOICE PACK'};
+  return run?.history_name || `${labels[run?.workflow_mode] || 'PRODUCTION'} · ${String(run?.production_mode || '—').toUpperCase()}`;
+}
+
+function openHistoryAction(mode, run) {
+  if (!run) return;
+  pendingHistoryAction = {mode, runId: run.id};
+  const deleting = mode === 'delete';
+  $('#historyActionKicker').textContent = deleting ? 'CLEAR HISTORY RECORD' : 'RENAME HISTORY RECORD';
+  $('#historyActionTitle').textContent = deleting ? 'Delete this production permanently?' : 'Name this production';
+  $('#historyActionCopy').textContent = deleting
+    ? historyDefaultName(run)
+    : 'Choose a clear label so this run is easier to find later.';
+  $('#historyRenameField').hidden = deleting;
+  $('#historyDeleteWarning').hidden = !deleting;
+  $('#historyRecordName').value = deleting ? '' : historyDefaultName(run);
+  $('#historyActionError').hidden = true;
+  $('#confirmHistoryAction').textContent = deleting ? 'DELETE FOREVER' : 'SAVE NAME';
+  $('#confirmHistoryAction').classList.toggle('danger', deleting);
+  $('#historyActionDialog').showModal();
+  if (!deleting) {
+    $('#historyRecordName').focus();
+    $('#historyRecordName').select();
+  }
+}
+
+function closeHistoryAction() {
+  pendingHistoryAction = null;
+  $('#historyActionDialog').close();
+}
+
+$('#historyActionForm').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!pendingHistoryAction) return;
+  const action = pendingHistoryAction;
+  const error = $('#historyActionError');
+  const confirmButton = $('#confirmHistoryAction');
+  error.hidden = true;
+  confirmButton.disabled = true;
+  try {
+    if (action.mode === 'rename') {
+      const name = $('#historyRecordName').value.trim();
+      if (!name) throw new Error('Enter a display name.');
+      await api(`/api/projects/${project.id}/jobs/${action.runId}/history`, {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+      });
+    } else {
+      await api(`/api/projects/${project.id}/jobs/${action.runId}/history`, {method: 'DELETE'});
+    }
+    closeHistoryAction();
+    await loadProjectRuns();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  } finally {
+    confirmButton.disabled = false;
+  }
+});
+
+$('#cancelHistoryAction').addEventListener('click', closeHistoryAction);
+$('#closeHistoryAction').addEventListener('click', closeHistoryAction);
+
 $('#refreshRunHistory').addEventListener('click', loadProjectRuns);
+$('#viewRunHistory').addEventListener('click', async () => {
+  await loadProjectRuns();
+  $('#runHistoryDialog').showModal();
+});
+$('#closeRunHistory').addEventListener('click', () => $('#runHistoryDialog').close());
 
 function showNewProject() {
   project = null;
@@ -1144,11 +1226,6 @@ function renderResults(result) {
     <div class="consistency-characters">${(consistency.characters || []).map((item) =>
       `<span><b>${escapeHtml(item.character)}</b> · ${item.score}% · ${item.line_count} line${item.line_count === 1 ? '' : 's'} · ${item.status.toUpperCase()}</span>`).join('')}</div>
     <p>${escapeHtml(consistency.measurement_note || '')}</p>` : '';
-  $('#exportPresets').innerHTML = (result.export_presets || []).length ? `
-    <div class="result-feature-heading"><div><span>GAME-ENGINE EXPORT PRESETS</span><h3>Metadata ready for implementation</h3></div></div>
-    <div class="export-links">${result.export_presets.map((item) =>
-      `<a href="/api/jobs/${currentJob.id}/exports/${encodeURIComponent(item.file)}"><b>${escapeHtml(item.engine)}</b><span>${escapeHtml(item.file)}</span><i>↓</i></a>`).join('')}</div>
-    <p>All presets and final WAV assets are also included in the game package ZIP.</p>` : '';
   $('#downloadBtn').href = result.package_url;
   $('#assetList').innerHTML = result.lines.map((line) => {
     const takes = line.takes.map((take, index) => `<div class="take-sequence">

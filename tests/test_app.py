@@ -74,6 +74,20 @@ def test_generation_cards_and_transient_poll_retry_are_present():
     assert "checkbox.checked = true" in script
     assert "BEST AVAILABLE · NEEDS REVIEW" in script
     assert "retry-result-line" in script
+    readiness_css = main_module.STATIC.joinpath("production-readiness.css").read_text(encoding="utf-8")
+    assert 'id="viewRunHistory"' in html
+    assert 'id="runHistoryDialog"' in html
+    assert 'id="historyActionDialog"' in html
+    assert 'id="historyDeleteWarning"' in html
+    assert 'id="exportPresets"' not in html
+    assert "CLEAR RECORD" in script
+    assert "data-rename-run" in script
+    assert "openHistoryAction('rename', run)" in script
+    assert "openHistoryAction('delete', run)" in script
+    assert "DELETE FOREVER" in script
+    assert "prompt(" not in script
+    assert "confirm(" not in script
+    assert "#downloadBtn { min-width:310px; font-size:14px; font-weight:900" in readiness_css
 
 
 def test_character_workspace_readability_and_control_spacing_are_present():
@@ -571,6 +585,14 @@ def test_production_readiness_features_import_history_exports_and_merge(isolated
     history = client.get(f"/api/projects/{project['id']}/jobs")
     assert history.status_code == 200
     assert any(item["id"] == original["id"] for item in history.json())
+    running = JobRecord(id="historyrun01", title=project["title"], project_id=project["id"])
+    pipeline_module.engine.jobs[running.id] = running
+    try:
+        assert client.delete(
+            f"/api/projects/{project['id']}/jobs/{running.id}/history"
+        ).status_code == 409
+    finally:
+        pipeline_module.engine.jobs.pop(running.id, None)
 
     retry_response = client.post(f"/api/projects/{project['id']}/produce", json={
         "target_language": "en", "production_mode": "production", "revision_limit": 1,
@@ -589,6 +611,23 @@ def test_production_readiness_features_import_history_exports_and_merge(isolated
     assert merged_job["result"]["lines"][0]["merged_retry_job_id"] == retry["id"]
     assert merged_job["result"]["run_receipt"]["merged_retries"][0]["line_id"] == 1
     assert client.get(merged_job["result"]["package_url"]).status_code == 200
+    renamed = client.patch(
+        f"/api/projects/{project['id']}/jobs/{original['id']}/history",
+        json={"name": "Forest Gate final pass"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["history_name"] == "Forest Gate final pass"
+    history_after_rename = client.get(f"/api/projects/{project['id']}/jobs").json()
+    assert next(item for item in history_after_rename if item["id"] == original["id"])[
+        "history_name"
+    ] == "Forest Gate final pass"
+
+    deleted = client.delete(f"/api/projects/{project['id']}/jobs/{original['id']}/history")
+    assert deleted.status_code == 204
+    assert all(item["id"] != original["id"] for item in client.get(
+        f"/api/projects/{project['id']}/jobs"
+    ).json())
+    assert client.get(merged_job["result"]["package_url"]).status_code == 404
 
 
 def test_xlsx_and_plain_text_script_imports(isolated_project_store):

@@ -28,7 +28,7 @@ load_dotenv()
 
 from app.models import (  # noqa: E402
     CharacterRecord, CharacterRecastCreate, CharacterUpdate, DialogueCreate, DialogueRecord, InboxManifest,
-    JobEvent, JobRecord, MergeRetryCreate, ProductionCreate,
+    HistoryRename, JobEvent, JobRecord, MergeRetryCreate, ProductionCreate,
     ProjectCreate, ProjectRecord, ProjectRequest, ProjectUpdate, VoicePackDraftCreate,
     VoicePreviewCreate,
     VoiceSelectionCreate,
@@ -950,9 +950,13 @@ def list_project_jobs(project_id: str) -> list[dict]:
     _project_or_404(project_id)
     combined = {job.id: job for job in state_store.list_jobs(project_id)}
     combined.update({job.id: job for job in engine.jobs.values() if job.project_id == project_id})
-    jobs = sorted(combined.values(), key=lambda item: item.created_at, reverse=True)[:30]
+    jobs = sorted(
+        (job for job in combined.values() if not job.history_hidden),
+        key=lambda item: item.created_at, reverse=True,
+    )[:30]
     return [{
         "id": job.id, "status": job.status, "stage": job.stage,
+        "history_name": job.history_name,
         "progress": job.progress, "workflow_mode": job.workflow_mode,
         "created_at": job.created_at, "updated_at": job.updated_at,
         "line_count": len((job.result or {}).get("lines", [])),
@@ -962,6 +966,36 @@ def list_project_jobs(project_id: str) -> list[dict]:
         "package_url": f"/api/jobs/{job.id}/package" if job.status == "completed" else None,
         "error": job.error,
     } for job in jobs]
+
+
+@app.patch("/api/projects/{project_id}/jobs/{job_id}/history", response_model=JobRecord)
+def rename_project_job_history(project_id: str, job_id: str,
+                               payload: HistoryRename) -> JobRecord:
+    _project_or_404(project_id)
+    job = engine.get(job_id)
+    if not job or job.project_id != project_id or job.history_hidden:
+        raise HTTPException(404, "Production history record not found.")
+    job.history_name = payload.name.strip()
+    job.updated_at = datetime.now(timezone.utc).isoformat()
+    state_store.save_job(job)
+    return job
+
+
+@app.delete("/api/projects/{project_id}/jobs/{job_id}/history", status_code=204)
+def delete_project_job_history(project_id: str, job_id: str) -> Response:
+    _project_or_404(project_id)
+    job = engine.get(job_id)
+    if not job or job.project_id != project_id:
+        raise HTTPException(404, "Production history record not found.")
+    if job.status in {"queued", "running"}:
+        raise HTTPException(409, "A running production cannot be cleared from history.")
+    job_dir = ARTIFACT_ROOT / job.id
+    if job_dir.exists():
+        shutil.rmtree(job_dir)
+    state_store.delete_job_artifacts(job.id)
+    state_store.delete_job(job.id)
+    engine.jobs.pop(job.id, None)
+    return Response(status_code=204)
 
 
 def _safe_file(job_id: str, filename: str) -> Path:

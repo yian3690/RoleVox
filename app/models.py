@@ -179,7 +179,13 @@ class JobRecord(BaseModel):
     events: list[JobEvent] = Field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
+    history_hidden: bool = False
+    history_name: str | None = None
 
 
 class MergeRetryCreate(BaseModel):
     replacement_job_id: str = Field(min_length=1, max_length=40)
+
+
+class HistoryRename(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
